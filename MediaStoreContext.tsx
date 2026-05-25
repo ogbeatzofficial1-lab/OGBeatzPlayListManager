@@ -581,7 +581,20 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
                 } else {
                   if (data && data.length === 0) {
                     try {
-                      await activeSupabase.from('activities').insert(MOCK_ACTIVITIES);
+                      // Only insert mock activities if foreign keys exist
+                      const { data: dbClients } = await activeSupabase.from('clients').select('id');
+                      const { data: dbTracks } = await activeSupabase.from('tracks').select('id');
+                      const dbClientIds = new Set((dbClients || []).map((c: any) => c.id));
+                      const dbTrackIds = new Set((dbTracks || []).map((t: any) => t.id));
+
+                      const validActivities = MOCK_ACTIVITIES.filter(act => 
+                        (!act.client_id || dbClientIds.has(act.client_id)) && 
+                        (!act.track_id || dbTrackIds.has(act.track_id))
+                      );
+
+                      if (validActivities.length > 0) {
+                        await activeSupabase.from('activities').insert(validActivities);
+                      }
                     } catch (insErr) {
                       console.warn("activities seeding failed:", insErr);
                     }
@@ -604,7 +617,17 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
                 } else {
                   if (data && data.length === 0) {
                     try {
-                      await activeSupabase.from('messages').insert(MOCK_MESSAGES);
+                      // Only insert mock messages if referencing valid clients
+                      const { data: dbClients } = await activeSupabase.from('clients').select('id');
+                      const dbClientIds = new Set((dbClients || []).map((c: any) => c.id));
+
+                      const validMessages = MOCK_MESSAGES.filter(msg => 
+                        (!msg.client_id || dbClientIds.has(msg.client_id))
+                      );
+
+                      if (validMessages.length > 0) {
+                        await activeSupabase.from('messages').insert(validMessages);
+                      }
                     } catch (insErr) {
                       console.warn("messages seeding failed:", insErr);
                     }

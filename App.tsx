@@ -2852,12 +2852,14 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
       <AnimatePresence>
         {selectedTrackForPromo && (
            <PromoPackModal 
+             {...({ key: "promo-pack-modal" } as any)}
              track={selectedTrackForPromo} 
              onClose={() => setSelectedTrackForPromo(null)} 
            />
         )}
         {editingTrack && (
           <EditTrackModal 
+            {...({ key: "edit-track-modal" } as any)}
             track={editingTrack}
             onClose={() => setEditingTrack(null)}
             onSave={updateTrack}
@@ -2866,6 +2868,7 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
         )}
         {editingPlaylist && (
           <EditPlaylistModal 
+            {...({ key: "edit-playlist-modal" } as any)}
             playlist={editingPlaylist}
             onClose={() => setEditingPlaylist(null)}
             onSave={(updates) => updatePlaylist(editingPlaylist.id, updates)}
@@ -2877,12 +2880,14 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
         )}
         {editingClient && (
           <EditClientModal 
+            {...({ key: "edit-client-modal" } as any)}
             client={editingClient}
             onClose={() => setEditingClient(null)}
           />
         )}
         {(selectedTrackForVideo || selectedPlaylistForVideo) && (
           <VideoGenerationModal 
+            {...({ key: "video-generation-modal" } as any)}
             track={selectedTrackForVideo || undefined}
             playlist={selectedPlaylistForVideo || undefined}
             onClose={() => {
@@ -2892,16 +2897,18 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
           />
         )}
         {showAddClient && (
-          <AddClientModal onClose={() => setShowAddClient(false)} />
+          <AddClientModal {...({ key: "add-client-modal" } as any)} onClose={() => setShowAddClient(false)} />
         )}
         {selectedPlaylist && showAddTracksToPlaylist && (
           <AddTrackToPlaylistModal 
+            {...({ key: "add-track-to-playlist-modal" } as any)}
             playlist={selectedPlaylist}
             onClose={() => setShowAddTracksToPlaylist(false)}
           />
         )}
         {sharingAsset && (
           <ShareModal 
+            {...({ key: "share-modal" } as any)}
             track={sharingAsset.track}
             playlist={sharingAsset.playlist}
             onClose={() => setSharingAsset(null)}
@@ -2909,12 +2916,13 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
         )}
         {selectedVideoForPreview && (
           <VideoPreviewModal 
+            {...({ key: "video-preview-modal" } as any)}
             video={selectedVideoForPreview}
             onClose={() => setSelectedVideoForPreview(null)}
           />
         )}
         {showUploadVideo && (
-          <UploadVideoModal onClose={() => setShowUploadVideo(false)} />
+          <UploadVideoModal {...({ key: "upload-video-modal" } as any)} onClose={() => setShowUploadVideo(false)} />
         )}
       </AnimatePresence>
 
