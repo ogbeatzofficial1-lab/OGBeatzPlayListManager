@@ -12,7 +12,7 @@ interface ShareModalProps {
 }
 
 export default function ShareModal({ track, playlist, onClose }: ShareModalProps) {
-  const { clients, addShareLink } = useMediaStore();
+  const { clients, addShareLink, connected } = useMediaStore();
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [downloadEnabled, setDownloadEnabled] = useState(false);
   const [expiresIn, setExpiresIn] = useState<string>('7d');
@@ -42,12 +42,14 @@ export default function ShareModal({ track, playlist, onClose }: ShareModalProps
     });
     // Keep link short and clean, avoiding massive encoded data or blob URLs
     let url = `${window.location.origin}/?share=${link.token}`;
-    if (track?.name || playlist?.name) {
-      url += `&name=${encodeURIComponent(track?.name || playlist?.name || '')}`;
-    }
-    const coverUrl = track?.image_url || playlist?.image_url;
-    if (coverUrl && !coverUrl.startsWith('blob:') && !coverUrl.startsWith('data:') && coverUrl.length < 200) {
-      url += `&coverImage=${encodeURIComponent(coverUrl)}`;
+    if (!connected) {
+      if (track?.name || playlist?.name) {
+        url += `&name=${encodeURIComponent(track?.name || playlist?.name || '')}`;
+      }
+      const coverUrl = track?.image_url || playlist?.image_url;
+      if (coverUrl && !coverUrl.startsWith('blob:') && !coverUrl.startsWith('data:') && coverUrl.length < 200) {
+        url += `&coverImage=${encodeURIComponent(coverUrl)}`;
+      }
     }
     setShareLink(url);
     setStep('result');
