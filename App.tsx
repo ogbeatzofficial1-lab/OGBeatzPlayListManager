@@ -1393,10 +1393,16 @@ export default function App() {
           {selectedPlaylist && (
             <div className="flex items-center gap-2">
               <button 
+                onClick={() => setEditingPlaylist(selectedPlaylist)}
+                className="px-6 py-3 border border-zinc-900 rounded-full text-xs font-black uppercase tracking-widest hover:border-zinc-700 transition-all text-zinc-400 hover:text-white flex items-center gap-2"
+              >
+                <Settings className="w-4 h-4 text-orange-500" /> Edit Collection
+              </button>
+              <button 
                 onClick={() => setSelectedPlaylistForVideo(selectedPlaylist)}
                 className="px-6 py-3 border border-zinc-900 rounded-full text-xs font-black uppercase tracking-widest hover:border-zinc-700 transition-all text-zinc-400 hover:text-white flex items-center gap-2"
               >
-                <Video className="w-4 h-4 text-orange-500" /> Promo Clip
+                <Video className="w-4 h-4 text-[inherit]" /> Promo Clip
               </button>
               <button 
                 onClick={() => handleSharePlaylist(selectedPlaylist)}
