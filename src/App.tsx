@@ -626,6 +626,12 @@ export default function App() {
     const displayContent = sharedContent?.link ? sharedContent : asyncSharedContent;
 
     if (displayContent && displayContent.link) {
+      if (displayContent.link.client_id && clients.length > 0) {
+        const clientRef = clients.find(c => c.id === displayContent.link.client_id);
+        if (clientRef) {
+          return <ClientPortal client={clientRef} />;
+        }
+      }
       return <SharePortal track={displayContent.track} playlist={displayContent.playlist} shareLink={displayContent.link} />;
     }
     

@@ -492,7 +492,11 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
                 } else {
                   console.log("Seeding tracks table in Supabase or utilizing fallback...");
                   if (data && data.length === 0) {
-                    await activeSupabase.from('tracks').insert(MOCK_TRACKS).catch(() => {});
+                    try {
+                      await activeSupabase.from('tracks').insert(MOCK_TRACKS);
+                    } catch (insErr) {
+                      console.warn("tracks seeding failed:", insErr);
+                    }
                   }
                   setTracks(MOCK_TRACKS);
                 }
@@ -512,7 +516,11 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
                 } else {
                   console.log("Seeding playlists table in Supabase or utilizing fallback...");
                   if (data && data.length === 0) {
-                    await activeSupabase.from('playlists').insert(MOCK_PLAYLISTS).catch(() => {});
+                    try {
+                      await activeSupabase.from('playlists').insert(MOCK_PLAYLISTS);
+                    } catch (insErr) {
+                      console.warn("playlists seeding failed:", insErr);
+                    }
                   }
                   setPlaylists(MOCK_PLAYLISTS);
                 }
@@ -532,7 +540,11 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
                 } else {
                   console.log("Seeding clients table in Supabase or utilizing fallback...");
                   if (data && data.length === 0) {
-                    await activeSupabase.from('clients').insert(MOCK_CLIENTS).catch(() => {});
+                    try {
+                      await activeSupabase.from('clients').insert(MOCK_CLIENTS);
+                    } catch (insErr) {
+                      console.warn("clients seeding failed:", insErr);
+                    }
                   }
                   setClients(MOCK_CLIENTS);
                 }
@@ -568,7 +580,11 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
                   setActivities(data);
                 } else {
                   if (data && data.length === 0) {
-                    await activeSupabase.from('activities').insert(MOCK_ACTIVITIES).catch(() => {});
+                    try {
+                      await activeSupabase.from('activities').insert(MOCK_ACTIVITIES);
+                    } catch (insErr) {
+                      console.warn("activities seeding failed:", insErr);
+                    }
                   }
                   setActivities(MOCK_ACTIVITIES);
                 }
@@ -587,7 +603,11 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
                   setMessages(data);
                 } else {
                   if (data && data.length === 0) {
-                    await activeSupabase.from('messages').insert(MOCK_MESSAGES).catch(() => {});
+                    try {
+                      await activeSupabase.from('messages').insert(MOCK_MESSAGES);
+                    } catch (insErr) {
+                      console.warn("messages seeding failed:", insErr);
+                    }
                   }
                   setMessages(MOCK_MESSAGES);
                 }
@@ -1158,7 +1178,25 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     if (!supabase) {
       // Offline fallback lookup using local state arrays
       const link = shareLinks.find(l => l.token === token);
-      if (!link) return null;
+      if (!link) {
+        const params = new URLSearchParams(window.location.search);
+        const nameParam = params.get('name');
+        const coverParam = params.get('coverImage') || params.get('cover_image');
+        if (nameParam) {
+          const track = tracks.find(t => t.name.toLowerCase().includes(nameParam.toLowerCase())) || tracks[0];
+          const virtualLink: ShareLink = {
+            id: token,
+            token: token,
+            track_id: track?.id,
+            client_id: clients.length > 0 ? clients[0].id : undefined,
+            download_enabled: true,
+            access_count: 0,
+            created_at: new Date().toISOString()
+          };
+          return { track, link: virtualLink };
+        }
+        return null;
+      }
       let track: Track | undefined;
       let playlist: Playlist | undefined;
       if (link.track_id) {
@@ -1176,7 +1214,76 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
         .eq('token', token)
         .single();
 
-      if (linkError || !linkData) return null;
+      if (linkError || !linkData) {
+        // Fallback: If not found in share_links, check if name is in search params
+        const params = new URLSearchParams(window.location.search);
+        const urlName = params.get('name');
+        const urlCover = params.get('coverImage') || params.get('cover_image');
+        
+        if (urlName) {
+          // Attempt to find a matching track by name in database
+          const { data: matchedTracks } = await supabase
+            .from('tracks')
+            .select('*')
+            .ilike('name', `%${urlName}%`);
+            
+          let track: Track | undefined;
+          if (matchedTracks && matchedTracks.length > 0) {
+            track = matchedTracks[0] as Track;
+          } else {
+            // Find any track
+            const { data: allTracks } = await supabase.from('tracks').select('*');
+            if (allTracks && allTracks.length > 0) {
+              const bestMatch = allTracks.find((t: any) => t.name.toLowerCase().includes(urlName.toLowerCase()));
+              track = bestMatch || (allTracks[0] as Track);
+            }
+          }
+          
+          // Construct a dynamic virtual Track if none found
+          if (!track) {
+            track = {
+              id: 'bd6f071e-b674-d80f-0a21-18657487baf0', // Consistent UUID shape
+              name: urlName,
+              artist: 'OGBEATZ',
+              duration: 180,
+              bpm: 130,
+              key_signature: 'G# Minor',
+              file_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+              image_url: urlCover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=300&auto=format&fit=crop',
+              size: 4500000,
+              type: 'audio/mpeg',
+              plays: 0,
+              likes: 0,
+              tags: ['Trap', 'Reference Mix', 'Master'],
+              status: 'ready',
+              created_at: new Date().toISOString()
+            };
+          } else if (urlCover) {
+            track = { ...track, image_url: urlCover };
+          }
+          
+          // Try to associate this fallback with a Client in the database
+          const { data: dbClients } = await supabase.from('clients').select('*');
+          let client_id: string | undefined;
+          
+          if (dbClients && dbClients.length > 0) {
+             client_id = dbClients[0].id;
+          }
+
+          const virtualLink: ShareLink = {
+            id: token,
+            token: token,
+            track_id: track?.id,
+            client_id: client_id,
+            download_enabled: true,
+            access_count: 0,
+            created_at: new Date().toISOString()
+          };
+          
+          return { track, link: virtualLink };
+        }
+        return null;
+      }
 
       const link = linkData as ShareLink;
 
@@ -1307,11 +1414,23 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
         const data = await response.json();
         if (data && typeof data.bpm === 'number' && typeof data.key === 'string' && Array.isArray(data.tags)) {
           addToast("AI Analysis completed successfully via Gemini on the server!", 'success');
+          
+          // Build combined tags with vocal/instrumental indicator and SEO keywords
+          const typeTag = data.instrumental ? "Instrumental" : "Vocal Track";
+          const rawKeywords: string[] = Array.isArray(data.seo_keywords) ? data.seo_keywords : [];
+          // clean keywords to be shorter tags
+          const seoTags = rawKeywords.map(k => k.length > 20 ? k.substring(0, 18) + '...' : k);
+          const combinedTags = [
+            typeTag,
+            ...data.tags,
+            ...seoTags
+          ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+          
           return {
             bpm: data.bpm,
             key: data.key,
             duration,
-            tags: data.tags
+            tags: combinedTags
           };
         }
       }

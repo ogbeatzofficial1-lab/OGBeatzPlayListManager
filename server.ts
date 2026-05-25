@@ -39,7 +39,7 @@ async function startServer() {
         }
       });
 
-      const prompt = `Analyze the audio track filename "${filename}" as a music expert. Determine its likely BPM, musical key signature (standard format, e.g. "C Major", "F# Minor", "A Min"), and 3 to 4 stylistic genre and mood tags. Check if the name contains bpm clues.`;
+      const prompt = `Analyze the audio track filename "${filename}" as a music expert. Determine its likely BPM, musical key signature (standard format, e.g. "C Major", "F# Minor", "A Min"), and 3 to 4 stylistic genre and mood tags. Check if the name contains bpm clues. Alos determine if the track is likely an instrumental or has vocals, and generate 4 high-value SEO keywords.`;
       
       const aiResponse = await ai.models.generateContent({
         model: "gemini-3.5-flash",
@@ -56,9 +56,15 @@ async function startServer() {
                 type: Type.ARRAY,
                 items: { type: Type.STRING },
                 description: "Up to 4 stylistic or genre-related tags, e.g. Trap, Clean, Dark"
+              },
+              instrumental: { type: Type.BOOLEAN, description: "True if the track is likely an instrumental track, false if it contains prominent lead vocals" },
+              seo_keywords: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "3 to 4 SEO-friendly keywords for search discoverability, e.g. 'lofi trap beat', 'chill electronic backing track'"
               }
             },
-            required: ["bpm", "key", "tags"]
+            required: ["bpm", "key", "tags", "instrumental", "seo_keywords"]
           }
         }
       });
@@ -71,7 +77,9 @@ async function startServer() {
             res.json({
               bpm: data.bpm,
               key: data.key,
-              tags: data.tags
+              tags: data.tags,
+              instrumental: data.instrumental ?? true,
+              seo_keywords: data.seo_keywords ?? []
             });
             return;
           }
@@ -197,16 +205,26 @@ BPM: ${trackInfo.bpm || 120}
 Key: ${trackInfo.key_signature || "C Major"}
 Tags: ${JSON.stringify(trackInfo.tags || [])}
 
-We need three formats:
+We need three core formats and an advanced music metadata analysis:
 1. YouTube Title and professional description copy card incorporating BPM, Key, credentials, and legal licensing instructions.
 2. Instagram promotional caption filled with hype emojis, hashtag blocks, and call-to-actions to access the secure artist portal.
-3. A short, humble professional email/message copy meant for pitch delivery to A&Rs, managers, and recording artists.`;
+3. A short, humble professional email/message copy meant for pitch delivery to A&Rs, managers, and recording artists.
+4. An intelligent musical assessment under 'analysis' consisting of:
+   - instrument_status: determine whether this track is likely an "Instrumental" or a "Vocal / Song" based on the name, artist, bpm, and tags.
+   - seo_keywords: an array of 6-8 high-volume music discovery keywords (e.g. "free Drake type beat 2026", "ambient synthesizers").
+   - beatstars_tags: an array of exactly 3 short, raw, genre-specific, high-value tags (e.g., "trap", "ambient", "synthwave") strictly limited to 1 word each, perfect for BeatStars catalog.
+   - youtube_tags: an array of 8 to 12 long-tail search tags/keywords perfect for copying into YouTube's key search tag index (e.g. "free trap beat", "melancholic instrumental").
+   - mood_tags: an array of exactly 3 emotional mood/vibe words descriptors (e.g. "Dark", "Aggressive", "Chill") perfect for BeatStars metadata.
+   - mood: a descriptive word or two for the track's emotional space (e.g. Melancholic, Aggressive, Uplifting, Chill).
+   - energy: estimate energy flow: "Low", "Medium", or "High".
+   - target_audience: name 2 or 3 contemporary artists or platforms this fit (e.g. "Travis Scott, Lil Baby, Netflix background sync").
+   - instruments: an array of 3-4 notable instruments heard or implied (e.g. "Reversed Rhodes, slide 808s, acoustic guitar, clean claps").`;
 
       const aiResponse = await ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
-          systemInstruction: "You are a platinum-selling hip-hop, electronic, and trap music marketing copywriter. You know how to make unreleased sound references sound ultra-exclusive and premium. Return direct JSON with youtube, instagram, and generic properties.",
+          systemInstruction: "You are a platinum-selling hip-hop, electronic, and trap music marketing copywriter. You know how to make unreleased sound references sound ultra-exclusive and premium. Return direct JSON with youtube, instagram, generic, and analysis properties as specified.",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -220,9 +238,39 @@ We need three formats:
                 required: ["title", "description"]
               },
               instagram: { type: Type.STRING },
-              generic: { type: Type.STRING }
+              generic: { type: Type.STRING },
+              analysis: {
+                type: Type.OBJECT,
+                properties: {
+                  instrument_status: { type: Type.STRING },
+                  seo_keywords: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                  },
+                  beatstars_tags: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                  },
+                  youtube_tags: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                  },
+                  mood_tags: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                  },
+                  mood: { type: Type.STRING },
+                  energy: { type: Type.STRING },
+                  target_audience: { type: Type.STRING },
+                  instruments: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                  }
+                },
+                required: ["instrument_status", "seo_keywords", "beatstars_tags", "youtube_tags", "mood_tags", "mood", "energy", "target_audience", "instruments"]
+              }
             },
-            required: ["youtube", "instagram", "generic"]
+            required: ["youtube", "instagram", "generic", "analysis"]
           }
         }
       });
