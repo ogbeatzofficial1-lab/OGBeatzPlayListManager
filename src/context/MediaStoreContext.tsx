@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Track, Playlist, Client, Activity, ShareLink, UserProfile, Message, PromoVideo } from '@/src/types';
 import { getSupabaseClient } from "@/src/lib/supabase";
+import { analyzeTrackWithGemini, pullLyricsWithGemini } from "@/src/services/geminiService";
 
 interface MediaStoreContextType {
   tracks: Track[];
@@ -28,7 +29,8 @@ interface MediaStoreContextType {
   addShareLink: (link: Partial<ShareLink>) => Promise<ShareLink>;
   getShareContent: (token: string) => Promise<{ track?: Track, playlist?: Playlist, link: ShareLink } | null>;
   addActivity: (activity: Partial<Activity>) => Promise<void>;
-  analyzeTrack: (name: string) => Promise<{ bpm: number, key: string, duration?: number }>;
+  analyzeTrack: (name: string) => Promise<{ bpm: number, key: string, duration?: number, tags?: string[] }>;
+  pullLyrics: (trackInfo: any, rawLyricsText?: string) => Promise<{ text: string; startTime: number; endTime: number; }[] | null>;
   messages: Message[];
   sendMessage: (clientId: string, content: string, image_url?: string | null, direction?: 'inbound' | 'outbound') => Promise<void>;
   promoVideos: PromoVideo[];
@@ -581,7 +583,20 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
                 } else {
                   if (data && data.length === 0) {
                     try {
-                      await activeSupabase.from('activities').insert(MOCK_ACTIVITIES);
+                      // Only insert mock activities if foreign keys exist
+                      const { data: dbClients } = await activeSupabase.from('clients').select('id');
+                      const { data: dbTracks } = await activeSupabase.from('tracks').select('id');
+                      const dbClientIds = new Set((dbClients || []).map((c: any) => c.id));
+                      const dbTrackIds = new Set((dbTracks || []).map((t: any) => t.id));
+
+                      const validActivities = MOCK_ACTIVITIES.filter(act => 
+                        (!act.client_id || dbClientIds.has(act.client_id)) && 
+                        (!act.track_id || dbTrackIds.has(act.track_id))
+                      );
+
+                      if (validActivities.length > 0) {
+                        await activeSupabase.from('activities').insert(validActivities);
+                      }
                     } catch (insErr) {
                       console.warn("activities seeding failed:", insErr);
                     }
@@ -604,7 +619,17 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
                 } else {
                   if (data && data.length === 0) {
                     try {
-                      await activeSupabase.from('messages').insert(MOCK_MESSAGES);
+                      // Only insert mock messages if referencing valid clients
+                      const { data: dbClients } = await activeSupabase.from('clients').select('id');
+                      const dbClientIds = new Set((dbClients || []).map((c: any) => c.id));
+
+                      const validMessages = MOCK_MESSAGES.filter(msg => 
+                        (!msg.client_id || dbClientIds.has(msg.client_id))
+                      );
+
+                      if (validMessages.length > 0) {
+                        await activeSupabase.from('messages').insert(validMessages);
+                      }
                     } catch (insErr) {
                       console.warn("messages seeding failed:", insErr);
                     }
@@ -954,7 +979,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       name: playlist.name || "New Playlist",
       description: playlist.description || "",
       image_url: playlist.image_url || "",
-      track_ids: [],
+      track_ids: playlist.track_ids || [],
       start_color: playlist.start_color || "#f97316",
       end_color: playlist.end_color || "#ea580c",
       created_at: new Date().toISOString()
@@ -1405,37 +1430,30 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     const duration = 120 + (cleanName.length * 3) % 111;
 
     try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: name })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data && typeof data.bpm === 'number' && typeof data.key === 'string' && Array.isArray(data.tags)) {
-          addToast("AI Analysis completed successfully via Gemini on the server!", 'success');
-          
-          // Build combined tags with vocal/instrumental indicator and SEO keywords
-          const typeTag = data.instrumental ? "Instrumental" : "Vocal Track";
-          const rawKeywords: string[] = Array.isArray(data.seo_keywords) ? data.seo_keywords : [];
-          // clean keywords to be shorter tags
-          const seoTags = rawKeywords.map(k => k.length > 20 ? k.substring(0, 18) + '...' : k);
-          const combinedTags = [
-            typeTag,
-            ...data.tags,
-            ...seoTags
-          ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
-          
-          return {
-            bpm: data.bpm,
-            key: data.key,
-            duration,
-            tags: combinedTags
-          };
-        }
+      const data = await analyzeTrackWithGemini(name);
+      if (data && typeof data.bpm === 'number' && typeof data.key === 'string' && Array.isArray(data.tags)) {
+        addToast("AI Analysis completed successfully via client-side Gemini!", 'success');
+        
+        // Build combined tags with vocal/instrumental indicator and SEO keywords
+        const typeTag = data.instrumental ? "Instrumental" : "Vocal Track";
+        const rawKeywords: string[] = Array.isArray(data.seo_keywords) ? data.seo_keywords : [];
+        // clean keywords to be shorter tags
+        const seoTags = rawKeywords.map((k: string) => k.length > 20 ? k.substring(0, 18) + '...' : k);
+        const combinedTags = [
+          typeTag,
+          ...data.tags,
+          ...seoTags
+        ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+        
+        return {
+          bpm: data.bpm,
+          key: data.key,
+          duration,
+          tags: combinedTags
+        };
       }
     } catch (e: any) {
-      console.warn("Could not reach server-side Gemini analyzer, performing offline heuristic fallback:", e.message);
+      console.warn("Could not reach client-side Gemini analyzer, performing offline heuristic fallback:", e.message);
     }
 
     const cleanLower = cleanName.toLowerCase();
@@ -1510,6 +1528,21 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     return { bpm, key, duration, tags: uniqueTags };
   };
 
+  const pullLyrics = async (trackInfo: any, rawLyricsText?: string): Promise<{ text: string; startTime: number; endTime: number; }[] | null> => {
+    try {
+      addToast(rawLyricsText ? "Aligning your official lyrics with AI..." : "Transcribing song lyrics structure with AI...", "info");
+      const result = await pullLyricsWithGemini(trackInfo, rawLyricsText);
+      if (result && Array.isArray(result)) {
+        addToast("Vocal transcription completed successfully!", "success");
+        return result;
+      }
+    } catch (e: any) {
+      console.error("Lyric syncing failure in client-side handler:", e);
+      addToast(`Engine connection issue: ${e.message}`, "error");
+    }
+    return null;
+  };
+
   const uploadFile = async (bucket: string, file: File): Promise<string | null> => {
     if (!supabase) {
       console.warn("Supabase not initialized for uploading.");
@@ -1550,7 +1583,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     <MediaStoreContext.Provider value={{
       tracks, playlists, clients, activities, profile, loading, loadingProgress, loadingStatusText, shareLinks, messages, promoVideos,
       addTrack, updateTrack, deleteTrack, addPlaylist, updatePlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist,
-      addClient, updateClient, deleteClient, updateProfile, addShareLink, getShareContent, addActivity, analyzeTrack, sendMessage, addPromoVideo, deletePromoVideo, incrementShareLinkAccess,
+      addClient, updateClient, deleteClient, updateProfile, addShareLink, getShareContent, addActivity, analyzeTrack, pullLyrics, sendMessage, addPromoVideo, deletePromoVideo, incrementShareLinkAccess,
       uploadFile,
       toasts, addToast, removeToast, connected
     }}>

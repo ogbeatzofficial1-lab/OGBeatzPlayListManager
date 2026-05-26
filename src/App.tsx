@@ -626,12 +626,6 @@ export default function App() {
     const displayContent = sharedContent?.link ? sharedContent : asyncSharedContent;
 
     if (displayContent && displayContent.link) {
-      if (displayContent.link.client_id && clients.length > 0) {
-        const clientRef = clients.find(c => c.id === displayContent.link.client_id);
-        if (clientRef) {
-          return <ClientPortal client={clientRef} />;
-        }
-      }
       return <SharePortal track={displayContent.track} playlist={displayContent.playlist} shareLink={displayContent.link} />;
     }
     
@@ -1399,10 +1393,16 @@ export default function App() {
           {selectedPlaylist && (
             <div className="flex items-center gap-2">
               <button 
+                onClick={() => setEditingPlaylist(selectedPlaylist)}
+                className="px-6 py-3 border border-zinc-900 rounded-full text-xs font-black uppercase tracking-widest hover:border-zinc-700 transition-all text-zinc-400 hover:text-white flex items-center gap-2"
+              >
+                <Settings className="w-4 h-4 text-orange-500" /> Edit Collection
+              </button>
+              <button 
                 onClick={() => setSelectedPlaylistForVideo(selectedPlaylist)}
                 className="px-6 py-3 border border-zinc-900 rounded-full text-xs font-black uppercase tracking-widest hover:border-zinc-700 transition-all text-zinc-400 hover:text-white flex items-center gap-2"
               >
-                <Video className="w-4 h-4 text-orange-500" /> Promo Clip
+                <Video className="w-4 h-4 text-[inherit]" /> Promo Clip
               </button>
               <button 
                 onClick={() => handleSharePlaylist(selectedPlaylist)}
@@ -2852,12 +2852,14 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
       <AnimatePresence>
         {selectedTrackForPromo && (
            <PromoPackModal 
+             key="promo-pack-modal"
              track={selectedTrackForPromo} 
              onClose={() => setSelectedTrackForPromo(null)} 
            />
         )}
         {editingTrack && (
           <EditTrackModal 
+            key="edit-track-modal"
             track={editingTrack}
             onClose={() => setEditingTrack(null)}
             onSave={updateTrack}
@@ -2866,6 +2868,7 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
         )}
         {editingPlaylist && (
           <EditPlaylistModal 
+            key="edit-playlist-modal"
             playlist={editingPlaylist}
             onClose={() => setEditingPlaylist(null)}
             onSave={(updates) => updatePlaylist(editingPlaylist.id, updates)}
@@ -2877,12 +2880,14 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
         )}
         {editingClient && (
           <EditClientModal 
+            key="edit-client-modal"
             client={editingClient}
             onClose={() => setEditingClient(null)}
           />
         )}
         {(selectedTrackForVideo || selectedPlaylistForVideo) && (
           <VideoGenerationModal 
+            key="video-generation-modal"
             track={selectedTrackForVideo || undefined}
             playlist={selectedPlaylistForVideo || undefined}
             onClose={() => {
@@ -2892,16 +2897,18 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
           />
         )}
         {showAddClient && (
-          <AddClientModal onClose={() => setShowAddClient(false)} />
+          <AddClientModal key="add-client-modal" onClose={() => setShowAddClient(false)} />
         )}
         {selectedPlaylist && showAddTracksToPlaylist && (
           <AddTrackToPlaylistModal 
+            key="add-track-to-playlist-modal"
             playlist={selectedPlaylist}
             onClose={() => setShowAddTracksToPlaylist(false)}
           />
         )}
         {sharingAsset && (
           <ShareModal 
+            key="share-modal"
             track={sharingAsset.track}
             playlist={sharingAsset.playlist}
             onClose={() => setSharingAsset(null)}
@@ -2909,12 +2916,13 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
         )}
         {selectedVideoForPreview && (
           <VideoPreviewModal 
+            key="video-preview-modal"
             video={selectedVideoForPreview}
             onClose={() => setSelectedVideoForPreview(null)}
           />
         )}
         {showUploadVideo && (
-          <UploadVideoModal onClose={() => setShowUploadVideo(false)} />
+          <UploadVideoModal key="upload-video-modal" onClose={() => setShowUploadVideo(false)} />
         )}
       </AnimatePresence>
 

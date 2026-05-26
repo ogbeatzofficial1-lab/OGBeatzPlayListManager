@@ -12,7 +12,7 @@ interface ShareModalProps {
 }
 
 export default function ShareModal({ track, playlist, onClose }: ShareModalProps) {
-  const { clients, addShareLink } = useMediaStore();
+  const { clients, addShareLink, connected } = useMediaStore();
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [downloadEnabled, setDownloadEnabled] = useState(false);
   const [expiresIn, setExpiresIn] = useState<string>('7d');
@@ -40,10 +40,17 @@ export default function ShareModal({ track, playlist, onClose }: ShareModalProps
       client_id: selectedClient?.id,
       expires_at: expiresAt
     });
-    // Automated URL Assembly matching live production path
-    const itemName = encodeURIComponent(track?.name || playlist?.name || 'Shared Music');
-    const itemImage = encodeURIComponent(track?.image_url || playlist?.image_url || '');
-    const url = `${window.location.origin}/?share=${link.token}&name=${itemName}&coverImage=${itemImage}`;
+    // Keep link short and clean, avoiding massive encoded data or blob URLs
+    let url = `${window.location.origin}/?share=${link.token}`;
+    if (!connected) {
+      if (track?.name || playlist?.name) {
+        url += `&name=${encodeURIComponent(track?.name || playlist?.name || '')}`;
+      }
+      const coverUrl = track?.image_url || playlist?.image_url;
+      if (coverUrl && !coverUrl.startsWith('blob:') && !coverUrl.startsWith('data:') && coverUrl.length < 200) {
+        url += `&coverImage=${encodeURIComponent(coverUrl)}`;
+      }
+    }
     setShareLink(url);
     setStep('result');
   };
@@ -227,17 +234,17 @@ export default function ShareModal({ track, playlist, onClose }: ShareModalProps
                       <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest mt-2">Secure access link generated successfully.</p>
                    </div>
 
-                   <div className="relative group">
+                   <div className="relative flex items-center bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden group">
                       <input 
                         readOnly
-                        value={shareLink!}
-                        className="w-full bg-black border border-zinc-800 rounded-2xl py-4 flex items-center justify-center text-center px-12 text-sm font-mono text-orange-500 selection:bg-orange-500 selection:text-black"
+                        value={shareLink || ''}
+                        className="w-full bg-transparent py-4 text-center pl-4 pr-12 text-xs font-mono text-orange-500 focus:outline-none select-all truncate font-semibold"
                       />
                       <button 
                         onClick={copyToClipboard}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer hover:border-zinc-700"
                       >
-                        {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                        {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
                    </div>
 

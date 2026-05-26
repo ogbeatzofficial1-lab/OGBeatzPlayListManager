@@ -11,10 +11,12 @@ import {
   Check, 
   Music, 
   Sparkles, 
-  Loader2 
+  Loader2,
+  Edit3
 } from 'lucide-react';
 import { Playlist, Track } from '../types';
 import { useMediaStore } from '../context/MediaStoreContext';
+import EditTrackModal from './EditTrackModal';
 
 const PRESET_GRADIENTS = [
   { name: 'Orange Flare', start: '#f97316', end: '#ea580c' },
@@ -32,7 +34,7 @@ export default function EditPlaylistModal({ playlist, onClose, onSave, onDelete,
   onDelete?: (id: string) => void;
   isNew?: boolean;
 }) {
-  const { tracks, uploadFile } = useMediaStore();
+  const { tracks, uploadFile, updateTrack, deleteTrack } = useMediaStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -47,6 +49,7 @@ export default function EditPlaylistModal({ playlist, onClose, onSave, onDelete,
 
   const [uploading, setUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [localEditingTrack, setLocalEditingTrack] = useState<Track | null>(null);
 
   // Find tracks currently in this playlist
   const playlistTracks = formData.track_ids
@@ -377,6 +380,14 @@ export default function EditPlaylistModal({ playlist, onClose, onSave, onDelete,
                           </button>
                           <button 
                             type="button"
+                            onClick={() => setLocalEditingTrack(track)}
+                            className="p-1.5 bg-zinc-950 hover:bg-zinc-800 hover:text-white rounded-lg border border-zinc-900 text-zinc-500 transition-all cursor-pointer"
+                            title="Edit Track Metadata"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            type="button"
                             onClick={() => removeTrack(track.id)}
                             className="p-1.5 bg-zinc-950 hover:bg-rose-500/10 hover:text-rose-400 rounded-lg border border-zinc-900 text-zinc-500 hover:border-rose-500/30 transition-all cursor-pointer"
                             title="Remove Track"
@@ -491,6 +502,14 @@ export default function EditPlaylistModal({ playlist, onClose, onSave, onDelete,
         </div>
 
       </div>
+      {localEditingTrack && (
+        <EditTrackModal 
+          track={localEditingTrack}
+          onClose={() => setLocalEditingTrack(null)}
+          onSave={updateTrack}
+          onDelete={deleteTrack}
+        />
+      )}
     </div>
   );
 }

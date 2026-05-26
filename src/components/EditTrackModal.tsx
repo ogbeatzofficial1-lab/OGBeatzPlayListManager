@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Save, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { X, Save, Image as ImageIcon, Trash2, Loader2 } from 'lucide-react';
 import { Track } from '../types';
 import { useMediaStore } from '../context/MediaStoreContext';
 
@@ -9,7 +9,9 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
   onSave?: (id: string, updates: Partial<Track>) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
 }) {
+  const { uploadFile } = useMediaStore();
   const [formData, setFormData] = useState({ ...track });
+  const [uploading, setUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = async () => {
@@ -19,11 +21,23 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
     onClose();
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      setFormData({ ...formData, image_url: url, image_data: file });
+      const localUrl = URL.createObjectURL(file);
+      setFormData(prev => ({ ...prev, image_url: localUrl }));
+      setUploading(true);
+
+      try {
+        const publicUrl = await uploadFile('artwork', file);
+        if (publicUrl) {
+          setFormData(prev => ({ ...prev, image_url: publicUrl }));
+        }
+      } catch (err) {
+        console.error('Error uploading track artwork:', err);
+      } finally {
+        setUploading(false);
+      }
     }
   };
 
@@ -60,6 +74,13 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
                   <ImageIcon className="text-zinc-500 w-10 h-10 group-hover:text-orange-500 transition-colors" />
                   <span className="text-[8px] font-black uppercase tracking-widest text-zinc-600 mt-2">ADD ARTWORK</span>
                 </>
+              )}
+
+              {uploading && (
+                <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center z-10">
+                  <Loader2 className="w-6 h-6 text-orange-500 animate-spin mb-1" />
+                  <span className="text-[7px] font-mono text-zinc-400 uppercase tracking-widest text-center px-2">Uploading art...</span>
+                </div>
               )}
             </div>
             <input 
