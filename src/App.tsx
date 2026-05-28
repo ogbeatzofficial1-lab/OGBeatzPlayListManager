@@ -14,17 +14,24 @@ function AppContent() {
   const [activeView, setActiveView] = useState('dashboard');
   const { tracks } = useMediaStore();
 
-  // If the Shell is black, we force a simple div test
+  // If activeView is dashboard, render your ORIGINAL function here
   return (
     <div style={{ width: '100vw', height: '100vh', background: 'black', color: 'white' }}>
       <Shell activeView={activeView} onViewChange={setActiveView}>
-        <div style={{ padding: '50px' }}>
-          <h1 style={{ fontSize: '3rem', fontWeight: '900' }}>TEST MODE: ACTIVE</h1>
-          <p>If you see this, the Shell is working and the database is connected.</p>
-          <div style={{ marginTop: '20px' }}>
-            <p>Total Tracks: {tracks?.length || 0}</p>
-          </div>
-        </div>
+        {activeView === 'dashboard' ? (
+           <div className="p-8">
+             <h1 className="text-3xl font-black uppercase">Dashboard</h1>
+             {/* Replace this with the actual content of your original renderDashboard() */}
+             <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+               <div className="p-6 bg-zinc-900 rounded-2xl">
+                 <h2 className="text-sm font-black uppercase text-zinc-500">Total Library</h2>
+                 <p className="text-4xl font-black mt-2">{tracks?.length || 0} Tracks</p>
+               </div>
+             </div>
+           </div>
+        ) : (
+           <div className="p-8"><h1>Please select a view.</h1></div>
+        )}
       </Shell>
     </div>
   );
