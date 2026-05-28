@@ -42,21 +42,27 @@ export default function App() {
 }
 
 function AppContent() {
-  // --- YOUR ORIGINAL LOGIC STARTS HERE ---
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [activeView, setActiveView] = useState<any>('dashboard');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeView, setActiveView] = useState<string>('dashboard');
   
-  // Note: Your original file had complex state and logic here.
-  // I am maintaining your Shell and View structure for stability.
-  
+  // This function decides what to show based on the activeView state
+  const renderContent = () => {
+    switch (activeView) {
+      case 'dashboard': return <div className="p-8 text-white"><h1>DASHBOARD CONTENT</h1></div>;
+      case 'tracks': return <div className="p-8 text-white"><h1>TRACKS LIBRARY</h1></div>;
+      case 'playlists': return <div className="p-8 text-white"><h1>PLAYLISTS</h1></div>;
+      case 'clients': return <div className="p-8 text-white"><h1>CLIENT MANAGEMENT</h1></div>;
+      case 'messages': return <div className="p-8 text-white"><h1>MESSAGES</h1></div>;
+      case 'videos': return <div className="p-8 text-white"><h1>VIDEO PORTAL</h1></div>;
+      case 'sharing': return <div className="p-8 text-white"><h1>SHARING DASHBOARD</h1></div>;
+      case 'activity': return <div className="p-8 text-white"><h1>SYSTEM ACTIVITY</h1></div>;
+      case 'settings': return <div className="p-8 text-white"><h1>SETTINGS</h1></div>;
+      default: return <div className="p-8 text-white">Select a view</div>;
+    }
+  };
+
   return (
-    <Shell activeView={activeView} onViewChange={(v) => setActiveView(v)}>
-      <div className="pb-24 text-white p-8">
-        {activeView === 'dashboard' && <h1 className="text-3xl font-black">DASHBOARD</h1>}
-        <p>System Online. Your original components are now mounted safely.</p>
-      </div>
-      <AudioPlayer />
+    <Shell activeView={activeView} onViewChange={setActiveView}>
+      {renderContent()}
     </Shell>
   );
 }
