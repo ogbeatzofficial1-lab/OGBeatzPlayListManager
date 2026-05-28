@@ -45,18 +45,18 @@ function AppContent() {
   const { tracks } = useMediaStore();
 
   return (
-    <div style={{ backgroundColor: 'red', color: 'white', padding: '50px', fontSize: '30px' }}>
-      <h1>IF YOU SEE THIS RED SCREEN, YOUR APP IS NOT RENDERING THE SHELL COMPONENT.</h1>
-      <p>Tracks count: {tracks.length}</p>
-      
-      {/* Test Shell directly */}
-      <div style={{ marginTop: '50px', border: '5px solid white' }}>
-        <Shell activeView={activeView} onViewChange={setActiveView}>
-          <div style={{ color: 'yellow', padding: '20px' }}>
-            <h2>IF YOU SEE THIS YELLOW TEXT, THE SHELL IS WORKING.</h2>
+    <div style={{ height: '100vh', width: '100vw', display: 'flex' }}>
+      <Shell activeView={activeView} onViewChange={setActiveView}>
+        <div style={{ padding: '40px', color: 'white' }}>
+          <h1 style={{ fontSize: '40px', fontWeight: 'bold' }}>SYSTEM ONLINE</h1>
+          <p>Tracks loaded: {tracks.length}</p>
+          <div style={{ marginTop: '20px', border: '1px solid #333', padding: '20px' }}>
+            <h3>Testing Dashboard Logic:</h3>
+            {/* If this prints, your data is fine */}
+            <pre>{JSON.stringify(tracks.slice(0, 2), null, 2)}</pre>
           </div>
-        </Shell>
-      </div>
+        </div>
+      </Shell>
     </div>
   );
 }
