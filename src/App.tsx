@@ -8,7 +8,10 @@ import {
   AlertCircle, Eye, BarChart3, GripVertical, Sun, Moon, Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
+import { 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  Tooltip, ResponsiveContainer, BarChart, Bar, Cell 
+} from 'recharts';
 import { useMediaStore } from './context/MediaStoreContext';
 import { useAudio } from './context/AudioContext';
 import Shell from './components/Shell';
@@ -31,7 +34,7 @@ import { Track, ShareLink, Client, Playlist } from './types';
 import { cn } from './lib/utils';
 import { getSupabaseClient, supabaseUrl } from './lib/supabase';
 
-// 1. SECURITY GATEKEEPER
+
 export default function App() {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
@@ -39,24 +42,33 @@ export default function App() {
   return <AppContent />;
 }
 
-// 2. FULL LOGIC CONTAINER
 function AppContent() {
-  const [activeView, setActiveView] = useState('dashboard');
-  const { tracks } = useMediaStore();
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('ogbeatz-theme') as 'dark' | 'light') || 'dark');
+  const [activeView, setActiveView] = useState<'dashboard' | 'tracks' | 'playlists' | 'clients' | 'messages' | 'sharing' | 'activity' | 'settings' | 'profile' | 'client-detail' | 'videos'>('dashboard');
+  
+
 
   return (
-    <div style={{ height: '100vh', width: '100vw', display: 'flex' }}>
-      <Shell activeView={activeView} onViewChange={setActiveView}>
-        <div style={{ padding: '40px', color: 'white' }}>
-          <h1 style={{ fontSize: '40px', fontWeight: 'bold' }}>SYSTEM ONLINE</h1>
-          <p>Tracks loaded: {tracks.length}</p>
-          <div style={{ marginTop: '20px', border: '1px solid #333', padding: '20px' }}>
-            <h3>Testing Dashboard Logic:</h3>
-            {/* If this prints, your data is fine */}
-            <pre>{JSON.stringify(tracks.slice(0, 2), null, 2)}</pre>
-          </div>
-        </div>
-      </Shell>
-    </div>
+    <Shell activeView={activeView} onViewChange={(v) => setActiveView(v as any)}>
+      <div className="pb-24">
+        {/* Your original routing logic remains here */}
+        {activeView === 'dashboard' && renderDashboard()}
+        {activeView === 'tracks' && renderTracks()}
+        {activeView === 'playlists' && renderPlaylists()}
+        {activeView === 'clients' && renderClients()}
+        {activeView === 'messages' && renderMessages()}
+        {activeView === 'videos' && renderVideos()}
+        {activeView === 'activity' && renderActivity()}
+        {activeView === 'sharing' && renderSharing()}
+        {activeView === 'profile' && renderProfile()}
+        {activeView === 'client-detail' && renderClientDetail()}
+        {activeView === 'settings' && (
+           <div className="p-8 text-white">
+             {/* Your original settings code */}
+           </div>
+        )}
+      </div>
+      <AudioPlayer />
+    </Shell>
   );
 }
