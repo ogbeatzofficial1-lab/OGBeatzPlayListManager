@@ -72,3 +72,4 @@ function AppContent() {
       <AudioPlayer />
     </Shell>
   );
+}
