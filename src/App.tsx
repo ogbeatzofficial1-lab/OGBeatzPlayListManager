@@ -34,35 +34,41 @@ import { Track, ShareLink, Client, Playlist } from './types';
 import { cn } from './lib/utils';
 import { getSupabaseClient, supabaseUrl } from './lib/supabase';
 
+// --- THE MOUNTING GUARD ---
 export default function App() {
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
+  
+  // This prevents the server build from executing your hooks/logic
   if (!isMounted) return <div className="h-screen bg-black w-full" />;
+  
   return <AppContent />;
 }
 
+// --- YOUR ORIGINAL CODE ---
 function AppContent() {
-  const [activeView, setActiveView] = useState<string>('dashboard');
-  
-  // This function decides what to show based on the activeView state
-  const renderContent = () => {
-    switch (activeView) {
-      case 'dashboard': return <div className="p-8 text-white"><h1>DASHBOARD CONTENT</h1></div>;
-      case 'tracks': return <div className="p-8 text-white"><h1>TRACKS LIBRARY</h1></div>;
-      case 'playlists': return <div className="p-8 text-white"><h1>PLAYLISTS</h1></div>;
-      case 'clients': return <div className="p-8 text-white"><h1>CLIENT MANAGEMENT</h1></div>;
-      case 'messages': return <div className="p-8 text-white"><h1>MESSAGES</h1></div>;
-      case 'videos': return <div className="p-8 text-white"><h1>VIDEO PORTAL</h1></div>;
-      case 'sharing': return <div className="p-8 text-white"><h1>SHARING DASHBOARD</h1></div>;
-      case 'activity': return <div className="p-8 text-white"><h1>SYSTEM ACTIVITY</h1></div>;
-      case 'settings': return <div className="p-8 text-white"><h1>SETTINGS</h1></div>;
-      default: return <div className="p-8 text-white">Select a view</div>;
-    }
-  };
+  // All your original state, useEffects, and render functions go here
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('ogbeatz-theme') as 'dark' | 'light') || 'dark';
+  });
 
-  return (
-    <Shell activeView={activeView} onViewChange={setActiveView}>
-      {renderContent()}
-    </Shell>
-  );
+  useEffect(() => {
+    localStorage.setItem('ogbeatz-theme', theme);
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('theme-light');
+    } else {
+      root.classList.remove('theme-light');
+    }
+  }, [theme]);
+
+  // [PASTE THE REST OF YOUR ORIGINAL CODE STARTING FROM 'activeView' HERE]
+  // ... (All your original useState hooks, logic, and render functions) ...
+  
+  // Ensure your return statement at the bottom is:
+  // return (
+  //   <Shell activeView={activeView} onViewChange={(v) => setActiveView(v)}>
+  //     ... (Your original routing logic: {activeView === 'dashboard' && renderDashboard()} etc.)
+  //   </Shell>
+  // );
 }
