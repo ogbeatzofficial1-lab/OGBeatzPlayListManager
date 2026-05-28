@@ -52,5 +52,5 @@ function AppContent() {
       </div>
     </Shell>
   );
-}
+
 }
