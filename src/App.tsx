@@ -41,35 +41,22 @@ export default function App() {
 
 // 2. FULL LOGIC CONTAINER
 function AppContent() {
-  // --- YOUR RESTORED LOGIC ---
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('ogbeatz-theme') as 'dark' | 'light') || 'dark');
-  const [activeView, setActiveView] = useState<string>('dashboard');
-  const [searchQuery, setSearchQuery] = useState('');
-  // (All your other original state hooks go here...)
+  const [activeView, setActiveView] = useState('dashboard');
+  const { tracks } = useMediaStore();
 
-  const { tracks, playlists, clients, loading } = useMediaStore();
-  const { playTrack } = useAudio();
-
-  // This return statement ensures your Shell always shows up
   return (
-    <Shell activeView={activeView} onViewChange={setActiveView}>
-      {/* This logic tells the app what to show based on the sidebar */}
-      {activeView === 'dashboard' && renderDashboard()}
-      {activeView === 'tracks' && renderTracks()}
-      {activeView === 'clients' && renderClients()}
-      {activeView === 'playlists' && renderPlaylists()}
-      {activeView === 'messages' && renderMessages()}
-      {activeView === 'sharing' && renderSharing()}
-      {activeView === 'activity' && renderActivity()}
-      {activeView === 'videos' && renderVideos()}
-      {activeView === 'settings' && (
-        <div className="p-8 text-white">
-           <h1 className="text-3xl font-black uppercase">Settings</h1>
-           {/* Your Settings logic here */}
-        </div>
-      )}
+    <div style={{ backgroundColor: 'red', color: 'white', padding: '50px', fontSize: '30px' }}>
+      <h1>IF YOU SEE THIS RED SCREEN, YOUR APP IS NOT RENDERING THE SHELL COMPONENT.</h1>
+      <p>Tracks count: {tracks.length}</p>
       
-      <AudioPlayer />
-    </Shell>
+      {/* Test Shell directly */}
+      <div style={{ marginTop: '50px', border: '5px solid white' }}>
+        <Shell activeView={activeView} onViewChange={setActiveView}>
+          <div style={{ color: 'yellow', padding: '20px' }}>
+            <h2>IF YOU SEE THIS YELLOW TEXT, THE SHELL IS WORKING.</h2>
+          </div>
+        </Shell>
+      </div>
+    </div>
   );
 }
