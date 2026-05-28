@@ -53,13 +53,22 @@ function AppContent() {
   // This return statement ensures your Shell always shows up
   return (
     <Shell activeView={activeView} onViewChange={setActiveView}>
-      <div className="p-8 text-white">
-        {/* Your original render logic: */}
-        {activeView === 'dashboard' && <h1 className="text-3xl font-black uppercase">Dashboard</h1>}
-        {activeView === 'tracks' && <h1 className="text-3xl font-black uppercase">Master Library</h1>}
-        <p className="text-zinc-500 mt-4">System Online. Tracks Loaded: {tracks.length}</p>
-      </div>
+      {/* This logic tells the app what to show based on the sidebar */}
+      {activeView === 'dashboard' && renderDashboard()}
+      {activeView === 'tracks' && renderTracks()}
+      {activeView === 'clients' && renderClients()}
+      {activeView === 'playlists' && renderPlaylists()}
+      {activeView === 'messages' && renderMessages()}
+      {activeView === 'sharing' && renderSharing()}
+      {activeView === 'activity' && renderActivity()}
+      {activeView === 'videos' && renderVideos()}
+      {activeView === 'settings' && (
+        <div className="p-8 text-white">
+           <h1 className="text-3xl font-black uppercase">Settings</h1>
+           {/* Your Settings logic here */}
+        </div>
+      )}
+      
       <AudioPlayer />
     </Shell>
   );
-}
