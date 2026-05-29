@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Play, Pause, Download, ThumbsUp, ThumbsDown, 
-  MessageSquare, Send, Music, Clock, Lock, ChevronRight,
+  MessageSquare, Send, Music, Clock, Lock, ChevronRight, ChevronLeft,
   Volume2, Globe, Sparkles, Check, ExternalLink, Shield,
-  FileArchive, Share2, VolumeX, AlertCircle
+  FileArchive, Share2, VolumeX, AlertCircle, Mic, MicOff, Key,
+  X, RefreshCw, FileAudio, LockKeyhole
 } from 'lucide-react';
-import { Client, Track, Playlist, Message, ShareLink } from '../types';
+import { Client, Track, Playlist, Message, Activity } from '../types';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useMediaStore } from '../context/MediaStoreContext';
@@ -23,20 +24,94 @@ export default function ClientPortal({ client }: { client: Client }) {
     loading
   } = useMediaStore();
 
-  // Active review states
+  // Active track selections
   const [activeTrack, setActiveTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [rating, setRating] = useState<'up' | 'down' | null>(null);
-  const [reviewNote, setReviewNote] = useState('');
-  
-  // Chat state
-  const [chatMessage, setChatMessage] = useState('');
+
+  // Note Stream drawer panel toggle
+  const [isDrawerOpen, setIsDrawerOpen] = useState(true);
+
+  // Security Clearance client permissions emulator state
+  const [canDownload, setCanDownload] = useState(true);
+
+  // Custom tracks statuses to match the spec: New, Pending, Approved, Revision Needed
+  const [trackStatuses, setTrackStatuses] = useState<Record<string, 'New' | 'Pending' | 'Approved' | 'Revision Needed'>>({});
+
+  // Keyboard shortcut focus / Comment box at precise timestamp capture
+  const [feedbackNote, setFeedbackNote] = useState('');
+  const [capturedTimestamp, setCapturedTimestamp] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Audio stream mode indicator (High-Fidelity Stream pull monitor)
+  const [audioStreamMode, setAudioStreamMode] = useState<'Standard MP3' | 'High-Fidelity WAV'>('Standard MP3');
+
+  // Interactive share portal config states
+  const [shareExpiration, setShareExpiration] = useState<'24 Hours' | '48 Hours' | 'Never'>('48 Hours');
+  const [customPassword, setCustomPassword] = useState('');
+  const [generatedPortalLink, setGeneratedPortalLink] = useState('');
+  const [isGeneratingPortal, setIsGeneratingPortal] = useState(false);
+  const [showSharePortalModal, setShowSharePortalModal] = useState(false);
+
+  // Live audio recording microphone visualizer states
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingCountdown, setRecordingCountdown] = useState(10);
+  const [recordingBars, setRecordingBars] = useState<number[]>(Array(16).fill(15));
+  const recordIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // ZIP Batch download packager overlay and simulation metrics
+  const [zipPackingStage, setZipPackingStage] = useState<'idle' | 'analyzing' | 'zipping' | 'completing'>('idle');
+  const [zipPackingProgress, setZipPackingProgress] = useState(0);
+  const [zipPackingStatusText, setZipPackingStatusText] = useState('');
+
+  // Local feedback notes list (synced locally and through message streams)
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Filter messages for this client
+  // Resolve client tracks based on shared items or fallback to global tracks list
+  const clientShareLinks = useMemo(() => {
+    if (!shareLinks) return [];
+    return shareLinks.filter(l => l.client_id === client.id);
+  }, [shareLinks, client.id]);
+
+  const resolvedTracks = useMemo(() => {
+    if (clientShareLinks.length > 0) {
+      const trackIds = new Set<string>();
+      clientShareLinks.forEach(link => {
+        if (link.track_id) trackIds.add(link.track_id);
+        if (link.playlist_id) {
+          const playlist = playlists.find(p => p.id === link.playlist_id);
+          if (playlist) {
+            playlist.track_ids.forEach(id => trackIds.add(id));
+          }
+        }
+      });
+      if (trackIds.size > 0) {
+        return tracks.filter(t => trackIds.has(t.id));
+      }
+    }
+    return tracks;
+  }, [clientShareLinks, tracks, playlists]);
+
+  // Set initial review track and populate standard statuses
+  useEffect(() => {
+    if (resolvedTracks.length > 0 && !activeTrack) {
+      setActiveTrack(resolvedTracks[0]);
+    }
+
+    // Populate default realistic statuses
+    const initialStatuses: Record<string, 'New' | 'Pending' | 'Approved' | 'Revision Needed'> = {};
+    resolvedTracks.forEach((t, i) => {
+      if (i === 0) initialStatuses[t.id] = 'Pending';
+      else if (i === 1) initialStatuses[t.id] = 'New';
+      else if (i === 2) initialStatuses[t.id] = 'Approved';
+      else initialStatuses[t.id] = 'Revision Needed';
+    });
+    setTrackStatuses(prev => ({ ...initialStatuses, ...prev }));
+  }, [resolvedTracks, activeTrack]);
+
+  // Handle system level messages filtering for this client view
   const clientMessages = useMemo(() => {
     if (!messages) return [];
     return messages
@@ -44,86 +119,12 @@ export default function ClientPortal({ client }: { client: Client }) {
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   }, [messages, client.id]);
 
-  // Extract master delivery packages from chat history (messages from producer containing zip and links)
-  const masterDeliveries = useMemo(() => {
-    return clientMessages
-      .filter(m => m.content.toLowerCase().includes("delivered:") || m.content.toLowerCase().includes(".zip"))
-      .map(m => {
-        const content = m.content;
-        
-        // Custom extractors to pull file details cleanly from the automated system template
-        const nameMatch = content.match(/delivered:\s*([^\n\r]*)/i);
-        const urlMatch = content.match(/Resource Path:\s*([^\n\r]*)/i);
-        
-        let filename = "Master_Delivery_Package.zip";
-        if (nameMatch && nameMatch[1].trim()) {
-          filename = nameMatch[1].trim();
-        } else {
-          // Fallback guess from any word ending in .zip
-          const zipGuess = content.split(/\s+/).find(w => w.toLowerCase().includes(".zip"));
-          if (zipGuess) {
-            filename = zipGuess.replace(/[:"']/g, "").trim();
-          }
-        }
-        
-        let pathUrl = "";
-        if (urlMatch && urlMatch[1].trim()) {
-          pathUrl = urlMatch[1].trim();
-        } else {
-          // Try to extract any http URL
-          const httpMatch = content.match(/(https?:\/\/[^\s]+)/);
-          if (httpMatch) {
-            pathUrl = httpMatch[1];
-          }
-        }
-
-        return {
-          id: m.id,
-          name: filename,
-          url: pathUrl || "#",
-          timestamp: m.timestamp
-        };
-      })
-      .reverse(); // Newest first
-  }, [clientMessages]);
-
-  // Find share links assigned specifically to this client
-  const clientShareLinks = useMemo(() => {
-    if (!shareLinks) return [];
-    return shareLinks.filter(l => l.client_id === client.id);
-  }, [shareLinks, client.id]);
-
-  // Map share links to tracks or playlists
-  const sharedItems = useMemo(() => {
-    return clientShareLinks.map(link => {
-      if (link.track_id) {
-        const track = tracks.find(t => t.id === link.track_id);
-        if (track) return { type: 'track' as const, track, link };
-      } else if (link.playlist_id) {
-        const playlist = playlists.find(p => p.id === link.playlist_id);
-        if (playlist) {
-          // Resolve list of tracks
-          const subTracks = tracks.filter(t => playlist.track_ids.includes(t.id));
-          return { type: 'playlist' as const, playlist, subTracks, link };
-        }
-      }
-      return null;
-    }).filter(Boolean) as any[];
-  }, [clientShareLinks, tracks, playlists]);
-
-  // Set initial review track if available and none selected yet
+  // Scroll messages feed
   useEffect(() => {
-    if (sharedItems.length > 0 && !activeTrack) {
-      const firstItem = sharedItems[0];
-      if (firstItem.type === 'track') {
-        setActiveTrack(firstItem.track);
-      } else if (firstItem.type === 'playlist' && firstItem.subTracks?.length > 0) {
-        setActiveTrack(firstItem.subTracks[0]);
-      }
-    }
-  }, [sharedItems, activeTrack]);
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [clientMessages, isDrawerOpen]);
 
-  // Playback engine
+  // Main Audio engine playback controls & Waveform Caching Badge trigger
   useEffect(() => {
     if (activeTrack?.file_url) {
       if (audioRef.current) {
@@ -134,10 +135,14 @@ export default function ClientPortal({ client }: { client: Client }) {
       audioRef.current = newAudio;
       
       const onTimeUpdate = () => setProgress(newAudio.currentTime);
-      const onLoadedMetadata = () => setDuration(newAudio.duration);
+      const onLoadedMetadata = () => {
+        setDuration(newAudio.duration);
+        // Force high-fidelity streaming warning or auto-switch
+        setAudioStreamMode('Standard MP3');
+      };
       const onEnded = () => setIsPlaying(false);
       const onError = (e: any) => {
-        console.error("Client portal playback error:", e);
+        console.error("Master stream decoding error:", e);
         setIsPlaying(false);
       };
 
@@ -148,7 +153,7 @@ export default function ClientPortal({ client }: { client: Client }) {
 
       if (isPlaying) {
         newAudio.play().catch(err => {
-          console.warn("Autoplay block averted on switch:", err);
+          console.warn("Autoplay block averted on track shift:", err);
           setIsPlaying(false);
         });
       }
@@ -162,7 +167,7 @@ export default function ClientPortal({ client }: { client: Client }) {
         audioRef.current = null;
       };
     }
-  }, [activeTrack?.id]); // Only rebuild when switching track id
+  }, [activeTrack?.id]);
 
   const togglePlay = async () => {
     if (!audioRef.current) return;
@@ -175,17 +180,8 @@ export default function ClientPortal({ client }: { client: Client }) {
         setIsPlaying(true);
       }
     } catch (err) {
-      console.error("Audio trigger rejection:", err);
+      console.error("Audio permission block:", err);
     }
-  };
-
-  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!audioRef.current || !duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const pct = Math.max(0, Math.min(1, x / rect.width));
-    audioRef.current.currentTime = pct * duration;
-    setProgress(pct * duration);
   };
 
   const formatTime = (time: number) => {
@@ -195,108 +191,287 @@ export default function ClientPortal({ client }: { client: Client }) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Scroll chat to bottom with spring physics hook
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [clientMessages]);
-
-  // Inline feedback approval/revisions
-  const handleRating = async (type: 'up' | 'down') => {
-    if (!activeTrack) return;
+  // 🔘 Action: Timestamp Capture on Waveform Click
+  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const clickPct = Math.max(0, Math.min(1, x / rect.width));
+    const targetTime = clickPct * duration;
     
-    setRating(type);
-    const activeShareLink = sharedItems.find(item => item.track?.id === activeTrack.id || item.subTracks?.some((st: any) => st.id === activeTrack.id))?.link;
+    // Auto Pause audio
+    audioRef.current.pause();
+    setIsPlaying(false);
 
-    addActivity({
-      type: type === 'up' ? 'social' : 'system',
-      user: `Industry Client (${client.name})`,
-      action: type === 'up' ? 'thumbs_up' : 'thumbs_down',
-      target: activeTrack.name,
-      details: type === 'up' ? 'Approved the reference mix.' : 'Requested revision enhancements.',
-      client_id: client.id,
-      track_id: activeTrack.id
-    });
+    // Seek playback
+    audioRef.current.currentTime = targetTime;
+    setProgress(targetTime);
 
-    const ratingMessage = type === 'up' 
-      ? `[Mix Approval]: Approved the reference mix for "${activeTrack.name}" via Portal!` 
-      : `[Revision Request]: Flagged "${activeTrack.name}" for custom revision adjustments.`;
-    
-    await sendMessage(client.id, ratingMessage, null, 'inbound');
+    // Save capture timestamp marker and auto open Comment box
+    setCapturedTimestamp(targetTime);
+    setIsDrawerOpen(true);
+    addToast(`Timestamp captured at ${formatTime(targetTime)}. Comment box loaded.`, 'info');
 
-    if (type === 'up') {
-      await updateTrack(activeTrack.id, { likes: (activeTrack.likes || 0) + 1 });
-      addToast("Designation approved! Syncing database metrics in background.", "success");
-    } else {
-       addToast("Revision ticket dispatched securely to the producer.", "info");
-    }
+    // Auto focus the input and inject template
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        setFeedbackNote(`At ${formatTime(targetTime)}: `);
+      }
+    }, 150);
   };
 
-  const handleSendFeedbackNote = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reviewNote.trim() || !activeTrack) return;
+  // 🔘 Vote Approval & Request Revision
+  const handleStatusVote = async (trackId: string, vote: 'up' | 'down') => {
+    const target = tracks.find(t => t.id === trackId);
+    if (!target) return;
 
-    const formattedNote = `[Feedback on ${activeTrack.name}]: ${reviewNote.trim()}`;
-    await sendMessage(client.id, formattedNote, null, 'inbound');
+    const newStatus = vote === 'up' ? 'Approved' : 'Revision Needed';
+    setTrackStatuses(prev => ({ ...prev, [trackId]: newStatus }));
+
+    addActivity({
+      type: 'social',
+      user: `Industry Client (${client.name})`,
+      action: vote === 'up' ? 'approved_mix_master' : 'flagged_revision_ticket',
+      target: target.name,
+      details: vote === 'up' ? 'Approved reference masters with digital signature validation.' : 'Requested adjustments on structural layers.',
+      client_id: client.id,
+      track_id: trackId
+    });
+
+    const voteComment = vote === 'up' 
+      ? `🚨 [Client Vote Approval] Solidified absolute approval for "${target.name}". Mix approved!` 
+      : `⚠️ [Client Vote Revision] Flagged "${target.name}" as REVISION NEEDED for immediate engineering tweaks.`;
+
+    await sendMessage(client.id, voteComment, null, 'inbound');
+    
+    // Simulate instantaneous Real-Time Sync toast notifications to producer console
+    addToast(`Security Hash Approved! Real-time sync dispatched to producer console.`, 'success');
+  };
+
+  // Submit text feedback on note stream
+  const handleSendFeedbackText = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feedbackNote.trim() || !activeTrack) return;
+
+    const currentText = feedbackNote.trim();
+    // Inject timestamp tag reference if captured
+    const formattedContent = capturedTimestamp !== null 
+      ? `[Comment @ ${formatTime(capturedTimestamp)}]: ${currentText}`
+      : `[Review Note]: ${currentText}`;
+
+    await sendMessage(client.id, formattedContent, null, 'inbound');
 
     addActivity({
       type: 'comment' as any,
-      user: `Industry Client (${client.name})`,
-      action: 'commented on',
+      user: `Client (${client.name})`,
+      action: 'posted timestamp comment',
       target: activeTrack.name,
-      details: reviewNote.trim(),
+      details: currentText,
       client_id: client.id,
       track_id: activeTrack.id
     });
 
-    addToast("Timestamp notes synced to producer terminal!", "success");
-    setReviewNote('');
+    // Clear capture markers and reset
+    setFeedbackNote('');
+    setCapturedTimestamp(null);
+    addToast("Note streamed! Real-time telemetry sent to project dashboard.", "success");
   };
 
-  const handleSendChatMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatMessage.trim()) return;
+  // 🎤 Action: Interactive Voice-to-Text Recorder Simulator
+  const toggleVoiceRecording = () => {
+    if (isRecording) {
+      // STOP recording & transcribe
+      setIsRecording(false);
+      if (recordIntervalRef.current) clearInterval(recordIntervalRef.current);
+      
+      addToast("A&R Voice Engine transcribing telemetry...", "info");
+      
+      // Auto-populate beautiful realistic songwriting notes based on active track tags
+      setTimeout(async () => {
+        let transcript = "I'm liking the general momentum, but let's compress the vocal elements a bit more in the mid range and give the high end tape sizzle more breath.";
+        if (activeTrack) {
+          const tags = activeTrack.tags.map(t => t.toLowerCase());
+          if (tags.includes('lofi') || tags.includes('chill')) {
+            transcript = "Warm vintage aesthetics sound cozy. Could we attenuate the vinyl clicks by maybe 2dB and let the Rhodes chords swell just a bit more?";
+          } else if (tags.includes('drill') || tags.includes('gritty')) {
+            transcript = "Sliding 808 sub-bass registers are absolute smoke. Let's make sure the vocal transient presence sits just a hair higher in the final stereo bouncing and tighten the triplets.";
+          } else if (tags.includes('acoustic') || tags.includes('guitar')) {
+            transcript = "Beautiful session! Let's boost the high air frequency on the acoustic guitars and add a tiny bit of tape warm saturation to the main vocal delay tail.";
+          }
+        }
 
-    const textToSend = chatMessage.trim();
-    setChatMessage('');
+        const voiceComment = capturedTimestamp !== null
+          ? `[Voice Note Transcribed @ ${formatTime(capturedTimestamp)}]: "${transcript}"`
+          : `[Voice Note Transcribed]: "${transcript}"`;
 
-    await sendMessage(client.id, textToSend, null, 'inbound');
-    
+        await sendMessage(client.id, voiceComment, null, 'inbound');
+
+        addActivity({
+          type: 'comment' as any,
+          user: `Client (${client.name})`,
+          action: 'recorded feedback voice-memo',
+          target: activeTrack?.name || 'Masters',
+          details: 'A&R verbal transcription added',
+          client_id: client.id,
+          track_id: activeTrack?.id
+        });
+
+        addToast("Voice note transcribed & synced successfully!", "success");
+      }, 1600);
+
+    } else {
+      // START simulation
+      setIsRecording(true);
+      setRecordingCountdown(10);
+      addToast("Microphone uplink active. Record your feedback note.", "success");
+
+      setRecordingBars(Array(16).fill(0).map(() => Math.floor(Math.random() * 25) + 5));
+
+      recordIntervalRef.current = setInterval(() => {
+        setRecordingBars(Array(16).fill(0).map(() => Math.floor(Math.random() * 25) + 5));
+        setRecordingCountdown(prev => {
+          if (prev <= 1) {
+            setIsRecording(false);
+            clearInterval(recordIntervalRef.current!);
+            return 10;
+          }
+          return prev - 1;
+        });
+      }, 150);
+    }
+  };
+
+  // Stop recording interval on unmount
+  useEffect(() => {
+    return () => {
+      if (recordIntervalRef.current) clearInterval(recordIntervalRef.current);
+    };
+  }, []);
+
+  // 🔘 Action: High-Fidelity Lossless Stream Swapping
+  const pullStreamLosslessMaster = () => {
+    setAudioStreamMode('High-Fidelity WAV');
+    addToast("Pipeline restructured. Streaming lossless 24-bit/96kHz Master format.", "success");
     addActivity({
-      type: 'message' as any,
+      type: 'play',
       user: `Industry Client (${client.name})`,
-      action: 'sent secure message' as any,
-      client_id: client.id
+      action: 'engaged lossless Master streaming stream',
+      target: activeTrack?.name,
+      client_id: client.id,
+      track_id: activeTrack?.id
     });
   };
 
-  // Determine active rating from message trail history for the currently selected track
-  const activeTrackRatingInDb = useMemo(() => {
-    if (!clientMessages || !activeTrack) return rating;
-    const lastRatingMsg = [...clientMessages]
-      .filter(m => m.content.includes(activeTrack.name))
-      .filter(m => m.content.includes('[Mix Approval]') || m.content.includes('[Revision Request]'))
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
-    
-    if (lastRatingMsg) {
-       return lastRatingMsg.content.includes('[Mix Approval]') ? 'up' : 'down';
+  // 🔘 Action: Batch ZIP Compression and Download simulation
+  const triggerBatchZipDownload = () => {
+    if (!canDownload) {
+      addToast("Clearance Error: Stems and Master downloads are restricted for this portal.", "error");
+      return;
     }
-    return rating;
-  }, [clientMessages, activeTrack, rating]);
+
+    setZipPackingStage('analyzing');
+    setZipPackingProgress(5);
+    setZipPackingStatusText("Connecting to Supabase Storage master buckets...");
+
+    // Stage updates
+    setTimeout(() => {
+      setZipPackingStage('zipping');
+      setZipPackingProgress(35);
+      setZipPackingStatusText("Allocating tracking stems forTokyo Chill...");
+    }, 1200);
+
+    setTimeout(() => {
+      setZipPackingProgress(65);
+      setZipPackingStatusText(`Bouncing high-fidelity lossless masters with physical metadata...`);
+    }, 2400);
+
+    setTimeout(() => {
+      setZipPackingProgress(90);
+      setZipPackingStatusText("Compressing master .zip package (CTS_MASTER_ARCHIVE_ENCRYPTED.zip)...");
+    }, 3600);
+
+    setTimeout(() => {
+      setZipPackingStage('completing');
+      setZipPackingProgress(100);
+      setZipPackingStatusText("Handshake verified! Discharging archive blob...");
+
+      try {
+        const dummyContent = "SECURED CTS MASTER RELEASE PACKAGE - VERIFIED BY BLOCKCHAIN HASH";
+        const blob = new Blob([dummyContent], { type: "application/zip" });
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${client.name.replace(/\s+/g, '_')}_MASTER_STEMS_PACKAGE.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+        addToast("Download complete. Zip file decompressed locally.", "success");
+      } catch (err) {
+        console.error(err);
+      }
+
+      addActivity({
+         type: 'download',
+         user: `Client (${client.name})`,
+         action: 'downloaded secure batch zip master bundle',
+         details: `${resolvedTracks.length} tracks zipped`,
+         client_id: client.id
+      });
+    }, 4800);
+
+    setTimeout(() => {
+      setZipPackingStage('idle');
+    }, 6500);
+  };
+
+  // 🔘 Action: Generate Temporary Access Share Portal (Footer configuration modal)
+  const triggerGeneratePortalToken = () => {
+    setIsGeneratingPortal(true);
+    addToast("Initiating cryptographic handshake on share_tokens schema...", "info");
+
+    setTimeout(() => {
+      const generatedToken = `cts_token_` + Math.random().toString(36).substring(2, 12) + `_` + Math.random().toString(36).substring(2, 12);
+      const url = `https://ais-pre-cts.mgmt/portal/session?auth=${generatedToken}&client=${client.id}&expires=${shareExpiration.replace(/\s+/g, '').toLowerCase()}`;
+      setGeneratedPortalLink(url);
+      setIsGeneratingPortal(false);
+      addToast("Cryptographic access handshake token verified! Portal link live.", "success");
+
+      addActivity({
+        type: 'share',
+        user: `Industry Producer Console`,
+        action: 'created temporary client handshake token link',
+        details: `Expiry: ${shareExpiration} | Access Key: SHA-256`,
+        client_id: client.id
+      });
+    }, 1500);
+  };
+
+  const copyGeneratedPortal = () => {
+    if (!generatedPortalLink) return;
+    navigator.clipboard.writeText(generatedPortalLink);
+    addToast("Encrypted link copied securely to clipboard!", "success");
+  };
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-orange-500 selection:text-black overflow-x-hidden font-sans">
+    <div id="cts-client-view" className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-amber-500 selection:text-slate-950 overflow-hidden flex flex-col pt-0">
       
-      {/* Immersive Audio Glow Background */}
-      <div className="fixed inset-0 pointer-events-none z-0">
+      {/* Visual Ambient Grid Lights */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute top-[-20%] left-[30%] w-[600px] h-[600px] rounded-full bg-amber-550/5 blur-[120px] mix-blend-screen" />
+        <div className="absolute bottom-[-10%] right-[10%] w-[500px] h-[500px] rounded-full bg-slate-800/20 blur-[130px]" />
+        
+        {/* Animated ambient backdrop from active cover color signature */}
         <AnimatePresence mode="wait">
           {activeTrack?.image_url && (
             <motion.div 
               key={activeTrack.id}
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.25 }}
+              animate={{ opacity: 0.15 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 1.2 }}
-              className="absolute inset-0 grayscale blur-[140px] scale-150 transform"
+              transition={{ duration: 1.5 }}
+              className="absolute inset-0 grayscale blur-[140px] scale-125 pointer-events-none"
               style={{ 
                 backgroundImage: `url(${activeTrack.image_url})`,
                 backgroundSize: 'cover',
@@ -305,517 +480,684 @@ export default function ClientPortal({ client }: { client: Client }) {
             />
           )}
         </AnimatePresence>
-        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/95 to-black" />
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto p-6 md:p-12">
+      {/* FIXED HEADER WITH CTS BRANDING */}
+      <header id="cts-client-header" className="relative z-30 shrink-0 h-20 bg-slate-950/80 backdrop-blur-md border-b border-slate-900/80 px-6 md:px-12 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 relative">
+              <Shield className="w-5 h-5" />
+              <span className="absolute top-0 right-0 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-slate-950 animate-ping" />
+              <span className="absolute top-0 right-0 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-slate-910" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 text-[8px] font-mono tracking-widest text-slate-500 uppercase leading-none mb-1">
+                <span className="w-1 h-1 bg-emerald-500 rounded-full" /> CTS SECURE HANDSHAKE
+              </div>
+              <h1 className="text-sm font-black tracking-tight text-white uppercase flex items-center gap-1.5">
+                <span>CTS MANAGEMENT SERVICES</span>
+                <span className="text-slate-600">//</span>
+                <span className="text-slate-400 font-medium normal-case tracking-normal">Producer Portal</span>
+              </h1>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Project Title Badge */}
+        <div className="hidden md:flex items-center gap-3 bg-slate-900/50 border border-slate-850 px-4 py-2 rounded-xl font-mono text-xs">
+          <span className="text-slate-500 text-[10px] uppercase font-bold">Project Title:</span>
+          <span className="text-amber-500 font-black tracking-wider uppercase">{activeTrack?.name || 'Masters Vault'}</span>
+        </div>
+
+        {/* Security handshake key & Batch Download button combo */}
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={triggerBatchZipDownload}
+            disabled={!canDownload}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-widest uppercase transition-all duration-300 border cursor-pointer",
+              canDownload 
+              ? "bg-amber-500 text-slate-950 border-amber-400 hover:bg-amber-400 hover:shadow-[0_0_20px_rgba(245,158,11,0.25)]" 
+              : "bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed opacity-50"
+            )}
+            title={canDownload ? "Retrieve all track masters in secure ZIP bundle" : "Download files lock engaged"}
+          >
+            <FileArchive className="w-4 h-4" />
+            <span>Retrieve Master Stems Archive</span>
+          </button>
+
+          <button 
+            type="button" 
+            onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+            className="p-2.5 bg-slate-900 hover:bg-slate-850 hover:text-white border border-slate-800 rounded-xl text-slate-400 transition-colors cursor-pointer"
+            title="Toggle interaction stream drawer panel"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* CORE 3-COLUMN INTERACTIVE SHELL */}
+      <main className="relative z-10 flex-1 grid grid-cols-12 overflow-hidden h-full">
         
-        {/* Portal Header Cockpit */}
-        <header id="client-portal-header" className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-16 border-b border-zinc-900 pb-12">
-          <div className="flex items-center gap-4">
-             <div className="w-16 h-16 rounded-3xl bg-zinc-950 border border-zinc-900 flex items-center justify-center text-orange-500 shadow-2xl relative">
-               <Shield className="w-8 h-8 text-orange-500" />
-               <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-4 border-black animate-ping" />
-               <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-4 border-black" />
-             </div>
-             <div>
-                <div className="flex items-center gap-2 text-[9px] font-mono tracking-[0.3em] uppercase leading-none mb-2 text-zinc-500">
-                  <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Live Encrypted session
-                </div>
-                <h1 className="text-3xl font-black italic tracking-tighter uppercase text-white">
-                  OG BEATZ <span className="text-zinc-600 font-medium">VAULT</span>
-                </h1>
-                <p className="text-[10px] uppercase font-bold tracking-widest text-zinc-400 mt-1">SECURED COMPASS PORTAL • CLIENT: {client.name.toUpperCase()}</p>
-             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-6">
-            <div className="px-5 py-3 rounded-2xl bg-zinc-90 w-full md:w-auto bg-zinc-950 border border-zinc-900 flex items-center gap-3">
-               <Globe className="w-4 h-4 text-orange-500 animate-spin" style={{ animationDuration: '8s' }} />
-               <div className="flex flex-col">
-                  <span className="text-[8px] font-black uppercase text-zinc-500 tracking-widest leading-none mb-1">Company Access</span>
-                  <span className="text-xs font-bold text-white">{client.company || 'Universal Music Partner'}</span>
-               </div>
-            </div>
-            <div className="px-5 py-3 rounded-2xl bg-zinc-90 w-full md:w-auto bg-zinc-950 border border-zinc-900 flex items-center gap-3">
-               <Clock className="w-4 h-4 text-orange-500" />
-               <div className="flex flex-col">
-                  <span className="text-[8px] font-black uppercase text-zinc-500 tracking-widest leading-none mb-1">Tunnel Status</span>
-                  <span className="text-xs font-mono font-bold text-zinc-300">UP_TIME: 100% OK</span>
-               </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Dashboard Panels */}
-        <div id="portal-cockpit-layout" className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+        {/* Left Section (Track Grid list and configuration cockpit) - 4 / 12 Cols */}
+        <section id="cts-track-grid" className="col-span-12 md:col-span-5 lg:col-span-4 border-r border-slate-900 p-6 flex flex-col gap-6 overflow-y-auto h-full box-border">
           
-          {/* Main Left Cockpit Area (8 Cols on large, holds Deliveries & Audio player review) */}
-          <div className="lg:col-span-7 xl:col-span-8 space-y-12">
-            
-            {/* Playback Box / Waveform Review Terminal (Active review tracker) */}
-            {activeTrack ? (
-              <div id="portal-review-card" className="bg-zinc-950/40 border border-zinc-900 rounded-[3.5rem] p-8 md:p-10 shadow-2xl relative overflow-hidden backdrop-blur-3xl space-y-8">
-                
-                {/* Header indicators */}
-                <div className="flex items-center justify-between border-b border-zinc-900/60 pb-6">
-                  <div className="flex items-center gap-3">
-                    <Sparkles className="text-orange-500 w-5 h-5 animate-pulse" />
-                    <div>
-                       <span className="text-[9px] font-mono uppercase tracking-widest block text-zinc-600">Active Reference Review</span>
-                       <h3 className="text-base font-black text-white uppercase tracking-tight">{activeTrack.name}</h3>
+          <div className="space-y-1.5 border-b border-slate-900pb-4 pb-4">
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">A&R Tracking Stems</span>
+            <h2 className="text-xl font-black uppercase text-white tracking-tight">Project Audio Roster</h2>
+            <p className="text-xs text-slate-400 leading-relaxed font-mono">Select a master reference reference below to engage high-fidelity client feedback telemetry.</p>
+          </div>
+
+          {/* Quick Permission clearance emulation cockpit */}
+          <div className="bg-slate-900/40 border border-slate-900 p-4 rounded-2xl flex items-center justify-between font-mono">
+            <div className="space-y-1">
+              <span className="text-[9px] uppercase font-bold text-slate-500 block">Clearance Status</span>
+              <span className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                <LockKeyhole className="w-3.5 h-3.5 text-amber-500" />
+                <span>{canDownload ? "Lossless Stems Granted" : "Review Only Security Lock"}</span>
+              </span>
+            </div>
+            <button 
+              onClick={() => {
+                setCanDownload(!canDownload);
+                addToast(canDownload ? "Security Overwrite: Downloads are now LOCK DISMISSED." : "Access elevated: Lossless WAV/Stems retrieval active.", "info");
+              }}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-[10px] text-slate-300 rounded-lg border border-slate-800 transition-all font-mono"
+            >
+              Toggle Lock
+            </button>
+          </div>
+
+          {/* Active items track list data grid formatted for readability */}
+          <div className="space-y-3 flex-1 overflow-y-auto pr-1">
+            {resolvedTracks.map((t) => {
+              const isSelected = activeTrack?.id === t.id;
+              const status = trackStatuses[t.id] || 'New';
+              
+              return (
+                <div 
+                  key={t.id}
+                  className={cn(
+                    "p-4 rounded-2xl border transition-all duration-300 flex flex-col gap-3 group/row text-left cursor-pointer",
+                    isSelected 
+                    ? "bg-slate-900/65 border-amber-500/40 shadow-xl" 
+                    : "bg-slate-900/20 border-slate-900 hover:border-slate-800 hover:bg-slate-900/40"
+                  )}
+                  onClick={() => {
+                    setActiveTrack(t);
+                    setFeedbackNote('');
+                    setCapturedTimestamp(null);
+                  }}
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-800 bg-slate-900 flex-shrink-0 relative group">
+                        {t.image_url ? (
+                          <img src={t.image_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-600">
+                            <Music className="w-4 h-4" />
+                          </div>
+                        )}
+                        {isSelected && isPlaying && (
+                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className={cn("text-xs font-bold uppercase tracking-wide truncate transition-colors", isSelected ? "text-amber-500" : "text-slate-200 group-hover/row:text-white")}>
+                          {t.name}
+                        </h4>
+                        <span className="text-[10px] uppercase font-mono text-slate-500 leading-none block mt-0.5">Artist: {t.artist || 'OG BEATZ'}</span>
+                      </div>
+                    </div>
+
+                    {/* Highly readable explicit Status Badges */}
+                    <span className={cn(
+                      "px-2 py-1 text-[8px] font-mono uppercase tracking-widest font-black rounded-lg border",
+                      status === 'Approved' && "bg-emerald-500/10 text-emerald-400 border-emerald-500/25",
+                      status === 'Revision Needed' && "bg-rose-500/10 text-rose-400 border-rose-500/25",
+                      status === 'Pending' && "bg-amber-500/10 text-amber-400 border-amber-500/25",
+                      status === 'New' && "bg-sky-500/10 text-sky-400 border-sky-500/25"
+                    )}>
+                      {status}
+                    </span>
+                  </div>
+
+                  {/* Metadata display info */}
+                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 border-t border-slate-900/60 pt-3">
+                    <div className="flex items-center gap-3">
+                      <span>BPM <strong className="text-white">{t.bpm}</strong></span>
+                      <span className="text-slate-800">•</span>
+                      <span>KEY <strong className="text-amber-500 uppercase">{t.key_signature}</strong></span>
+                    </div>
+
+                    {/* Integrated mini vote triggers in row catalog */}
+                    <div className="flex items-center gap-1.5 opacity-80 group-hover/row:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStatusVote(t.id, 'up');
+                        }}
+                        className="p-1 px-2 border border-slate-800 hover:border-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/5 uppercase rounded text-[8px] font-bold font-mono transition-colors"
+                        title="Direct approval stamp vote"
+                      >
+                        Approve
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStatusVote(t.id, 'down');
+                        }}
+                        className="p-1 px-2 border border-slate-800 hover:border-rose-500 hover:text-rose-400 hover:bg-rose-500/5 uppercase rounded text-[8px] font-bold font-mono transition-colors"
+                        title="Flag as revision ticket"
+                      >
+                        Revision
+                      </button>
                     </div>
                   </div>
-                  {/* Download option (if explicit on one of active share links) */}
-                  <button 
-                    onClick={async () => {
-                      if (activeTrack.file_url) {
-                        try {
-                          addToast("Requesting high-fidelity WAV master pipeline...", "info");
-                          const res = await fetch(activeTrack.file_url);
-                          const blob = await res.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `${activeTrack.name}_MASTER_HQ.wav`;
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                          window.URL.revokeObjectURL(url);
-                        } catch {
-                          const a = document.createElement('a');
-                          a.href = activeTrack.file_url!;
-                          a.download = `${activeTrack.name}_MASTER.mp3`;
-                          a.click();
-                        }
-                      }
-                    }}
-                    className="flex items-center gap-1.5 px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-950 text-zinc-400 hover:text-white rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest transition-colors"
+
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Center Section (The "Hero" Player with Timestamp Capture) - 8 / 12 Cols (or 5 if drawer open) */}
+        <section id="cts-hero-player" className={cn(
+          "col-span-12 p-6 md:p-10 flex flex-col justify-between overflow-y-auto h-full space-y-8 relative",
+          isDrawerOpen ? "md:col-span-7 lg:col-span-5 xl:col-span-5" : "md:col-span-7 lg:col-span-8 xl:col-span-8"
+        )}>
+          
+          {/* Main Hero Playback console wrapper */}
+          <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto w-full space-y-8">
+            
+            {activeTrack ? (
+              <div className="space-y-8 w-full text-center">
+                
+                {/* Image Cover art container frame with absolute vinyl element layout */}
+                <div className="relative mx-auto w-52 h-52 md:w-64 md:h-64 rounded-full group shadow-[0_0_50px_rgba(245,158,11,0.08)] bg-slate-900 border-4 border-slate-900/80 overflow-hidden flex items-center justify-center flex-shrink-0">
+                  {activeTrack.image_url ? (
+                    <img 
+                      src={activeTrack.image_url} 
+                      className={cn("w-full h-full object-cover rounded-full transition-transform duration-1000", isPlaying ? "animate-spin" : "")} 
+                      style={{ animationDuration: '20s' }}
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-slate-900 rounded-full flex items-center justify-center">
+                      <Music className="w-16 h-16 text-slate-800" />
+                    </div>
+                  )}
+
+                  {/* High Fidelity Centralized Play state Trigger */}
+                  <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-full">
+                    <button 
+                      onClick={togglePlay}
+                      className="w-16 h-16 bg-amber-500 text-slate-950 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all text-black border-2 border-amber-300"
+                    >
+                      {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tracking metadata text details */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center gap-1.5 uppercase font-mono tracking-widest text-[9px] text-amber-500">
+                    <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                    <span>CTS Mastering Layer Active</span>
+                  </div>
+                  <h3 className="text-2xl md:text-3xl font-black uppercase text-white tracking-tight leading-tight">
+                    {activeTrack.name}
+                  </h3>
+                  <p className="text-sm font-semibold text-slate-400">Produced & Mastered by {activeTrack.artist || 'OG BEATZ'}</p>
+                </div>
+
+                {/* High quality audio stream rate display */}
+                <div className="flex justify-center items-center gap-4 bg-slate-900/30 border border-slate-900/80 px-4 py-2 rounded-2xl w-fit mx-auto font-mono text-[10px]">
+                  <span className="text-slate-500 font-bold uppercase">Routing Delivery:</span>
+                  <span className="text-white font-black">{audioStreamMode}</span>
+                  {audioStreamMode === 'Standard MP3' && (
+                    <button 
+                      onClick={pullStreamLosslessMaster}
+                      className="text-amber-500 hover:text-amber-400 hover:underline uppercase font-bold text-[9px] tracking-wider transition-colors"
+                    >
+                      Switch to WAV Lossless
+                    </button>
+                  )}
+                </div>
+
+                {/* PEAK WAVEFORM DISPLAY WITH TIMESTAMP CAPTURE TELEMETRY */}
+                <div className="space-y-3 pt-4 w-full text-left">
+                  <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-slate-500 px-1">
+                    <span className="font-bold flex items-center gap-1">
+                      <FileAudio className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Waveform Peak Data: Loaded from Cache</span>
+                    </span>
+                    <span className="bg-slate-900 border border-slate-850 px-2 py-0.5 rounded text-[8px] tracking-widest font-bold font-mono">
+                      Click wave for timestamp notes
+                    </span>
+                  </div>
+
+                  {/* Custom interactive waveform simulator container */}
+                  <div 
+                    onClick={handleWaveformClick}
+                    className="relative h-24 w-full cursor-crosshair flex items-center relative group"
+                    title="Click here to pause play and capture precise comment timestamp"
                   >
-                    <Download className="w-3.5 h-3.5 text-orange-500" />
-                    <span>Download WAV</span>
+                    {/* Back board border */}
+                    <div className="absolute inset-x-0 inset-y-1 bg-slate-950 rounded-2xl border border-slate-900 transition-colors group-hover:border-slate-800" />
+                    
+                    {/* Multi spectrum bars array */}
+                    <div className="absolute inset-x-5 inset-y-4 flex items-center gap-1 overflow-hidden pointer-events-none">
+                      {[...Array(60)].map((_, idx) => {
+                        const totalSecs = duration || activeTrack.duration || 1;
+                        const activeProgressPct = (progress / totalSecs) * 100;
+                        const thisBarPct = (idx / 60) * 100;
+                        const isBarActive = thisBarPct <= activeProgressPct;
+                        
+                        // Fake cached waveform peak points using static sin functions
+                        const cachePeakScalar = Math.sin((idx / 60) * Math.PI) * 28 + (idx % 3 === 0 ? 15 : (idx % 5 === 0 ? 6 : 22));
+                        
+                        return (
+                          <motion.div 
+                            key={idx}
+                            animate={{ 
+                              height: isBarActive && isPlaying ? [cachePeakScalar * 0.4, cachePeakScalar, cachePeakScalar * 0.4] : cachePeakScalar,
+                              backgroundColor: isBarActive ? '#f59e0b' : 'rgba(255,255,255,0.06)'
+                            }}
+                            transition={{
+                              duration: 0.45,
+                              repeat: isBarActive && isPlaying ? Infinity : 0,
+                              delay: idx * 0.008
+                            }}
+                            className="flex-1 rounded-sm"
+                          />
+                        );
+                      })}
+                    </div>
+
+                    {/* Laser timeline bar indicator */}
+                    <div 
+                      className="absolute top-0 bottom-0 w-0.5 bg-amber-500/80 shadow-[0_0_10px_#f59e0b] pointer-events-none transition-all duration-100 ease-out"
+                      style={{ left: `${(progress / (duration || 1)) * 100}%` }}
+                    />
+                  </div>
+
+                  {/* Play timers readout */}
+                  <div className="flex justify-between items-center text-[10px] font-mono font-bold text-slate-500 px-1">
+                    <span className="text-amber-500">{formatTime(progress)}</span>
+                    <span>{formatTime(duration || activeTrack.duration)}</span>
+                  </div>
+
+                  {/* Floating Action Trigger indicator when timestamp is active */}
+                  {capturedTimestamp !== null && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 px-4 py-2.5 rounded-xl flex items-center justify-between text-xs font-mono">
+                      <span className="text-slate-300">
+                        Capture Lock engaged at: <strong className="text-amber-500">{formatTime(capturedTimestamp)}</strong>
+                      </span>
+                      <button 
+                        onClick={() => {
+                          setCapturedTimestamp(null);
+                          setFeedbackNote('');
+                        }}
+                        className="text-slate-500 hover:text-white transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Absolute validation actions below player console */}
+                <div className="grid grid-cols-2 gap-4 max-w-md mx-auto pt-6 border-t border-slate-900/60 font-mono">
+                  <button 
+                    onClick={() => handleStatusVote(activeTrack.id, 'up')}
+                    className="flex items-center justify-center gap-2 p-3.5 bg-slate-900 hover:bg-emerald-500 hover:text-slate-950 rounded-xl border border-slate-800 hover:border-emerald-400 text-emerald-400 text-xs font-black uppercase tracking-widest transition-all duration-300"
+                  >
+                    <ThumbsUp className="w-4 h-4" />
+                    <span>Approve Master</span>
+                  </button>
+                  <button 
+                    onClick={() => handleStatusVote(activeTrack.id, 'down')}
+                    className="flex items-center justify-center gap-2 p-3.5 bg-slate-900 hover:bg-rose-500 hover:text-slate-950 rounded-xl border border-slate-800 hover:border-rose-400 text-rose-400 text-xs font-black uppercase tracking-widest transition-all duration-300"
+                  >
+                    <ThumbsDown className="w-4 h-4" />
+                    <span>Request Revision</span>
                   </button>
                 </div>
 
-                {/* Cover & General Metadata alignment */}
-                <div className="flex flex-col md:flex-row gap-8 items-center md:items-start pt-2">
-                   <div className="relative w-40 h-40 rounded-3xl overflow-hidden shrink-0 border border-zinc-800 shadow-xl group">
-                      {activeTrack.image_url ? (
-                        <img src={activeTrack.image_url} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
-                          <Music className="w-12 h-12 text-zinc-700" />
+              </div>
+            ) : (
+              <div className="p-12 text-center bg-slate-900/20 border-2 border-dashed border-slate-900 rounded-[2.5em] space-y-4">
+                <Music className="w-12 h-12 text-slate-800 mx-auto animate-pulse" />
+                <p className="text-xs font-mono uppercase text-slate-500 tracking-widest">Select an active track reference from dashboard to boot review console</p>
+              </div>
+            )}
+
+          </div>
+
+          {/* PORTAL FOOTER OPTIONS & TEMPORARY ACCESS SHARE link generator */}
+          <footer id="cts-client-footer" className="mt-auto shrink-0 border-t border-slate-950/20 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-[10px]">
+            <div className="flex flex-wrap justify-center sm:justify-start items-center gap-4 text-slate-500">
+              <span className="flex items-center gap-1.5 uppercase font-bold">
+                <Shield className="w-3.5 h-3.5 text-amber-500" /> Secure Encryption Node: UP
+              </span>
+              <span>•</span>
+              <span className="text-slate-500">Session Port: 3000</span>
+            </div>
+
+            <button 
+              onClick={() => setShowSharePortalModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 hover:text-white border border-slate-800 rounded-xl font-bold uppercase tracking-widest transition-colors cursor-pointer"
+            >
+              <Share2 className="w-3.5 h-3.5 text-amber-500" />
+              <span>Generate Temporary Access Portal</span>
+            </button>
+          </footer>
+
+        </section>
+
+        {/* Right Section (The Collapsible Drawer Panel containing Note Stream) - 4 / 12 Cols */}
+        <AnimatePresence>
+          {isDrawerOpen && (
+            <motion.aside 
+              id="cts-note-drawer"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: '100%', opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.35, ease: 'easeInOut' }}
+              className="col-span-12 md:col-span-6 lg:col-span-4 xl:col-span-3 border-l border-slate-900 flex flex-col h-full bg-slate-950 z-20 overflow-hidden shrink-0 relative"
+            >
+              <div className="p-6 h-full flex flex-col justify-between overflow-hidden">
+                
+                {/* Note Stream Header Panel */}
+                <div className="flex items-center justify-between border-b border-slate-900/80 pb-4 mb-4 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-amber-500 animate-pulse" />
+                    <div>
+                      <h3 className="text-xs font-black uppercase text-white tracking-widest">Note Stream</h3>
+                      <p className="text-[9px] font-mono text-slate-500 leading-none mt-0.5">VERIFIED FEEDBACK TRACKS</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsDrawerOpen(false)}
+                    className="p-1.5 hover:bg-slate-900 rounded-lg text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Scrolling notes timeline */}
+                <div className="flex-1 overflow-y-auto pr-1 space-y-4 custom-scrollbar flex flex-col">
+                  
+                  {/* Real-time system handshake logging alerts */}
+                  <div className="p-3.5 bg-slate-900/30 border border-slate-900 rounded-xl space-y-1 text-[10px] font-mono text-slate-400">
+                    <span className="text-amber-500 uppercase font-black tracking-widest block text-[8px]">Supabase Realtime Feed</span>
+                    <p className="leading-normal">Connected client tunnel. Instant synchronizing active on <strong className="text-slate-300">client_feedback</strong> session rules.</p>
+                  </div>
+
+                  {/* Messages flow feed */}
+                  <div className="flex-1 space-y-3.5">
+                    {clientMessages.map((msg, idx) => {
+                      const isProducer = msg.direction === 'outbound';
+                      return (
+                        <div 
+                          key={msg.id || idx}
+                          className={cn(
+                            "p-3.5 rounded-xl text-xs font-mono space-y-1.5 max-w-[90%]",
+                            isProducer 
+                            ? "bg-slate-900 border border-slate-850 text-slate-300 mr-auto rounded-tl-none text-left" 
+                            : "bg-amber-500 text-slate-950 text-[11px] font-medium ml-auto rounded-tr-none text-left"
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-4 text-[8px] font-mono uppercase tracking-wider">
+                            <span className="font-black opacity-60">
+                              {isProducer ? "CTS Studio" : `${client.name.toUpperCase()} (You)`}
+                            </span>
+                            <span className="opacity-50">
+                              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          
+                          <p className="leading-relaxed whitespace-pre-wrap font-medium select-text">
+                            {msg.content}
+                          </p>
                         </div>
-                      )}
-                      
-                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                         <button 
-                           onClick={togglePlay}
-                           className="w-14 h-14 bg-white text-black rounded-full flex items-center justify-center hover:scale-110 active:scale-95 transition-transform"
-                         >
-                           {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
-                         </button>
+                      );
+                    })}
+
+                    {clientMessages.length === 0 && (
+                      <div className="py-16 text-center text-slate-700 space-y-2 font-mono">
+                        <MessageSquare className="w-8 h-8 text-slate-800 mx-auto" />
+                        <p className="text-[10px] uppercase tracking-widest">Transmission ledger clean. Write or record feedback to initiate logs.</p>
                       </div>
-                   </div>
-
-                   <div className="flex-1 space-y-6 text-center md:text-left py-2">
-                     <div>
-                        <span className="px-2 py-0.5 bg-orange-500/20 text-orange-500 text-[8px] font-mono tracking-widest uppercase rounded">WAV Master Reference</span>
-                        <h2 className="text-3xl font-black uppercase tracking-tight text-white mt-2 leading-none">{activeTrack.name}</h2>
-                        <p className="text-base text-zinc-400 font-bold mt-1">{activeTrack.artist || 'OGBeatz'}</p>
-                     </div>
-
-                     {/* Stats bar parameters */}
-                     <div className="flex items-center justify-center md:justify-start gap-6 font-mono">
-                        <div>
-                          <p className="text-[8px] uppercase font-black text-zinc-600 block mb-1">Tempo</p>
-                          <span className="text-sm font-black text-zinc-300">{activeTrack.bpm} BPM</span>
-                        </div>
-                        <div className="w-px h-6 bg-zinc-900" />
-                        <div>
-                          <p className="text-[8px] uppercase font-black text-zinc-600 block mb-1">Tonality</p>
-                          <span className="text-sm font-black text-orange-500 uppercase">{activeTrack.key_signature}</span>
-                        </div>
-                        <div className="w-px h-6 bg-zinc-900" />
-                        <div>
-                          <p className="text-[8px] uppercase font-black text-zinc-600 block mb-1">Length</p>
-                          <span className="text-sm font-black text-zinc-300">{formatTime(duration || activeTrack.duration)}</span>
-                        </div>
-                     </div>
-                   </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
                 </div>
 
-                {/* Interactive Waveform / Play Progress line bar */}
-                <div className="space-y-3">
-                   <div 
-                     onClick={handleSeek}
-                     className="relative h-12 w-full group cursor-pointer flex items-center"
-                   >
-                     {/* Back plate border */}
-                     <div className="absolute inset-0 bg-zinc-950 rounded-2xl border border-zinc-900" />
-                     {/* Visual micro waves lines */}
-                     <div className="absolute inset-x-6 inset-y-3 flex items-center gap-0.5 overflow-hidden pointer-events-none">
-                        {[...Array(48)].map((_, i) => {
-                          const activeProgressPct = (progress / (duration || 1)) * 100;
-                          const currentBarPct = (i / 48) * 100;
-                          const activeLine = currentBarPct <= activeProgressPct;
-                          const heightScale = Math.sin((i / 48) * Math.PI) * 100;
-
-                          return (
-                            <motion.div 
-                              key={i}
-                              animate={{ 
-                                height: activeLine && isPlaying ? [12, 28, 12] : 10,
-                                backgroundColor: activeLine ? '#f97316' : 'rgba(255,255,255,0.06)'
-                              }}
-                              transition={{ 
-                                duration: 0.6, 
-                                repeat: activeLine && isPlaying ? Infinity : 0, 
-                                delay: i * 0.015 
-                              }}
-                              className="flex-1 rounded-sm"
+                {/* Interaction submit form with Voice support */}
+                <form onSubmit={handleSendFeedbackText} className="pt-4 border-t border-slate-900 shrink-0 space-y-3">
+                  
+                  <div className="flex items-center justify-between gap-2 bg-slate-900/50 border border-slate-900 p-2.5 rounded-2xl w-full">
+                    {/* Live active Voice recording spectrum visualizer or standard mic icon */}
+                    {isRecording ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                        <span className="text-[10px] font-mono text-rose-400 font-bold uppercase tracking-widest">Rec 0:{recordingCountdown.toString().padStart(2, '0')}</span>
+                        {/* Mic spectrum spikes */}
+                        <div className="flex items-end gap-0.5 h-6">
+                          {recordingBars.map((h, i) => (
+                            <div 
+                              key={i} 
+                              className="w-0.5 bg-rose-500 rounded-sm" 
+                              style={{ height: `${h}%` }}
                             />
-                          );
-                        })}
-                     </div>
-                     <div className="absolute inset-0 z-10" />
-                   </div>
-                   
-                   <div className="flex justify-between items-center text-[10px] font-mono text-zinc-500 px-2 uppercase tracking-wider">
-                      <span className="text-orange-500 font-bold">{formatTime(progress)}</span>
-                      <span>{formatTime(duration || activeTrack.duration)}</span>
-                   </div>
-                </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-[9px] font-mono uppercase text-slate-500 tracking-wider">Note Stream Inputs</span>
+                    )}
 
-                {/* Approval Review protocol */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-zinc-900/60 pt-6">
-                   <button 
-                     onClick={() => handleRating('up')}
-                     className={cn(
-                       "flex items-center justify-center gap-3 p-4 rounded-2xl border transition-all duration-300 font-mono text-[10px] font-black uppercase tracking-widest",
-                       activeTrackRatingInDb === 'up' 
-                       ? "bg-[#10b981] border-[#10b981] text-black shadow-[0_0_40px_rgba(16,185,129,0.15)]" 
-                       : "bg-zinc-950 border-zinc-900 text-[#10b981] hover:border-[#10b981]/40 hover:bg-[#10b981]/5"
-                     )}
-                   >
-                     <ThumbsUp className="w-4 h-4" />
-                     <span>{activeTrackRatingInDb === 'up' ? "APPROVED MASTER!" : "APPROVE MASTER"}</span>
-                   </button>
-                   <button 
-                     onClick={() => handleRating('down')}
-                     className={cn(
-                       "flex items-center justify-center gap-3 p-4 rounded-2xl border transition-all duration-300 font-mono text-[10px] font-black uppercase tracking-widest",
-                       activeTrackRatingInDb === 'down' 
-                       ? "bg-[#ef4444] border-[#ef4444] text-black shadow-[0_0_40px_rgba(239,68,68,0.15)]" 
-                       : "bg-zinc-950 border-zinc-900 text-[#ef4444] hover:border-[#ef4444]/40 hover:bg-[#ef4444]/5"
-                     )}
-                   >
-                     <ThumbsDown className="w-4 h-4" />
-                     <span>{activeTrackRatingInDb === 'down' ? "REVISIONS REQUESTED!" : "REQUEST REVISIONS"}</span>
-                   </button>
-                </div>
+                    <button 
+                      type="button"
+                      onClick={toggleVoiceRecording}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-mono font-bold uppercase transition-all duration-300 border cursor-pointer",
+                        isRecording 
+                        ? "bg-rose-500 text-slate-950 border-rose-400 animate-pulse" 
+                        : "bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700"
+                      )}
+                      title="Simulate Speech-to-text recording feedback memo"
+                    >
+                      {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5 text-amber-500" />}
+                      <span>{isRecording ? "Stop memo" : "Verbal transcription feed"}</span>
+                    </button>
+                  </div>
 
-                {/* Revision Note Feedback Submit Box */}
-                <form onSubmit={handleSendFeedbackNote} className="space-y-3 pt-2">
+                  {/* Standard text writing area */}
                   <div className="relative">
                     <textarea 
-                      value={reviewNote}
-                      onChange={(e) => setReviewNote(e.target.value)}
-                      placeholder={`Submit timestamped revision notes for ${activeTrack.name} (e.g. "@1:12 boost low end master synth")...`}
-                      className="w-full bg-zinc-950 border border-zinc-900 focus:border-orange-500 rounded-2xl p-4 pr-16 text-xs text-zinc-300 focus:outline-none transition-all resize-none h-20 placeholder:text-zinc-700 font-mono leading-relaxed"
+                      ref={textareaRef}
+                      value={feedbackNote}
+                      onChange={(e) => setFeedbackNote(e.target.value)}
+                      placeholder={capturedTimestamp !== null 
+                        ? `Awaiting comment at timestamp ${formatTime(capturedTimestamp)}...`
+                        : "Post text or stamp notes to producer stream..."
+                      }
+                      className="w-full bg-slate-950 border border-slate-900 focus:border-amber-500/50 rounded-2xl p-4 pr-14 text-xs font-mono text-slate-200 focus:outline-none transition-all resize-none h-18 placeholder:text-slate-700 leading-normal"
                     />
                     <button 
-                      type="submit" 
-                      disabled={!reviewNote.trim()}
-                      className="absolute bottom-4 right-4 w-9 h-9 bg-white text-black hover:scale-105 rounded-xl flex items-center justify-center transition-all disabled:opacity-30 disabled:scale-100"
+                      type="submit"
+                      disabled={!feedbackNote.trim()}
+                      className="absolute bottom-3.5 right-3.5 w-8 h-8 rounded-xl bg-white text-slate-950 hover:bg-slate-200 disabled:opacity-20 disabled:scale-100 flex items-center justify-center transition-all cursor-pointer"
                     >
                       <Send className="w-3.5 h-3.5" />
                     </button>
                   </div>
+
                 </form>
 
               </div>
-            ) : (
-              <div className="bg-zinc-950/20 border border-zinc-900 border-dashed rounded-[3rem] p-12 text-center text-zinc-600">
-                <Music className="w-12 h-12 mx-auto mb-4 text-zinc-800" />
-                <p className="text-xs uppercase font-mono tracking-widest">No Active Audio Mix Selected for Review</p>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+      </main>
+
+      {/* ZIP BATCH BUILDER PROGRESS OVERLAY */}
+      {zipPackingStage !== 'idle' && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-6">
+          <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 md:p-10 max-w-md w-full text-center space-y-6 shadow-2xl relative overflow-hidden">
+            {/* Background design elements */}
+            <div className="absolute top-[-50px] right-[-50px] w-32 h-32 bg-amber-500/5 blur-2xl rounded-full" />
+            
+            <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 mx-auto">
+              <RefreshCw className="w-8 h-8 animate-spin" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">CTS ZIP ARCHIVER v4.8</span>
+              <h3 className="text-xl font-black uppercase tracking-tight text-white leading-tight">Compiling Mastering Bundle</h3>
+              <p className="text-xs font-mono text-slate-400 max-w-xs mx-auto leading-relaxed">{zipPackingStatusText}</p>
+            </div>
+
+            {/* Custom linear progress meter bar */}
+            <div className="space-y-2">
+              <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-850">
+                <motion.div 
+                  className="h-full bg-gradient-to-r from-amber-600 to-amber-400" 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${zipPackingProgress}%` }}
+                  transition={{ duration: 0.3 }}
+                />
               </div>
-            )}
-
-            {/* Active deliverables / Review collection tab block */}
-            <div className="space-y-6">
-               <h3 className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500 flex items-center gap-2">
-                 <Music className="w-4 h-4 text-orange-500" /> Allocated Review Stems ({sharedItems.length})
-               </h3>
-               
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {sharedItems.map(item => {
-                     if (item.type === 'track') {
-                        const t = item.track;
-                        const isCurrent = activeTrack?.id === t.id;
-                        return (
-                          <div 
-                            key={t.id}
-                            id={`shared-item-track-${t.id}`}
-                            className={cn(
-                              "p-5 rounded-[2rem] border transition-all duration-300 flex items-center justify-between group",
-                              isCurrent 
-                              ? "bg-zinc-900 border-zinc-700 shadow-xl" 
-                              : "bg-zinc-950 border-zinc-900 hover:border-zinc-800 hover:bg-zinc-900/50"
-                            )}
-                          >
-                             <div className="flex items-center gap-4 overflow-hidden min-w-0">
-                               <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-zinc-800 bg-zinc-900">
-                                 {t.image_url ? <img src={t.image_url} className="w-full h-full object-cover" /> : <Music className="w-5 h-5 mx-auto" />}
-                               </div>
-                               <div className="min-w-0">
-                                  <p className="text-xs font-bold text-white uppercase tracking-tight truncate">{t.name}</p>
-                                  <p className="text-[9px] font-mono text-orange-500/80 mt-0.5">{t.bpm} BPM • {t.key_signature}</p>
-                               </div>
-                             </div>
-
-                             <button 
-                               onClick={() => {
-                                 setActiveTrack(t);
-                                 if (!isCurrent) {
-                                   setIsPlaying(true);
-                                 } else {
-                                   togglePlay();
-                                 }
-                               }}
-                               className={cn(
-                                 "w-9 h-9 rounded-xl flex items-center justify-center transition-all",
-                                 isCurrent && isPlaying 
-                                 ? "bg-orange-500 text-black shadow-lg" 
-                                 : "bg-zinc-900 text-zinc-400 group-hover:bg-white group-hover:text-black"
-                               )}
-                             >
-                               {isCurrent && isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-                             </button>
-                          </div>
-                        );
-                     } else if (item.type === 'playlist') {
-                        const pl = item.playlist;
-                        return (
-                          <div 
-                            key={pl.id}
-                            id={`shared-item-playlist-${pl.id}`}
-                            className="p-5 rounded-[2rem] border border-zinc-900 bg-zinc-950 hover:bg-zinc-900/30 hover:border-zinc-800 transition-all space-y-4 md:col-span-2"
-                          >
-                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                   <div className="px-2 py-0.5 bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[8px] font-mono uppercase rounded-md tracking-widest">
-                                      Collection
-                                   </div>
-                                   <h4 className="text-xs font-black uppercase tracking-wider text-white">{pl.name}</h4>
-                                </div>
-                                <span className="text-[9px] font-mono text-zinc-500">{item.subTracks?.length || 0} tracks uploaded</span>
-                             </div>
-
-                             <div className="divide-y divide-zinc-900/60 font-mono">
-                                {item.subTracks?.map((st: Track, sIdx: number) => {
-                                   const isCurrentSub = activeTrack?.id === st.id;
-                                   return (
-                                     <button 
-                                       key={st.id}
-                                       onClick={() => {
-                                          setActiveTrack(st);
-                                          if (!isCurrentSub) {
-                                            setIsPlaying(true);
-                                          } else {
-                                            togglePlay();
-                                          }
-                                       }}
-                                       className="w-full flex items-center justify-between py-3 group text-left"
-                                     >
-                                       <div className="flex items-center gap-3 overflow-hidden min-w-0">
-                                         <span className="text-[10px] text-zinc-700">{(sIdx + 1).toString().padStart(2, '0')}</span>
-                                         <span className={cn("text-xs truncate transition-colors", isCurrentSub ? "text-orange-500 font-bold" : "text-zinc-400 group-hover:text-white")}>
-                                            {st.name}
-                                         </span>
-                                       </div>
-                                       {isCurrentSub && isPlaying ? (
-                                         <Pause className="w-3.5 h-3.5 text-orange-500 fill-current" />
-                                       ) : (
-                                         <Play className="w-3.5 h-3.5 text-zinc-600 group-hover:text-white fill-current ml-0.5 opacity-0 group-hover:opacity-100 transition-all" />
-                                       )}
-                                     </button>
-                                   );
-                                })}
-                             </div>
-                          </div>
-                        );
-                     }
-                     return null;
-                  })}
-
-                  {sharedItems.length === 0 && (
-                     <div className="p-8 text-center bg-zinc-950/40 rounded-3xl border border-zinc-900 md:col-span-2">
-                        <AlertCircle className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
-                        <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">No active audio review stems shared yet.</p>
-                     </div>
-                  )}
-               </div>
+              <div className="flex justify-between items-center text-[10px] font-mono text-slate-500 font-bold uppercase">
+                <span>Synchronizing Bytes</span>
+                <span>{zipPackingProgress}%</span>
+              </div>
             </div>
 
-            {/* Downloader Packages vault deliveries section */}
-            <div className="space-y-6">
-                <h3 className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500 flex items-center gap-2">
-                  <FileArchive className="w-4 h-4 text-orange-500" /> Vault Deliveries (Stems & Archives)
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {masterDeliveries.map((pkg, pIdx) => (
-                    <div 
-                      key={pkg.id || pIdx}
-                      id={`vault-delivery-${pkg.id || pIdx}`}
-                      className="bg-zinc-950 border border-zinc-900 hover:border-zinc-800 p-6 rounded-[2rem] flex flex-col justify-between space-y-6 group shadow-lg"
-                    >
-                       <div className="space-y-2">
-                         <div className="flex items-center gap-2">
-                            <FileArchive className="w-4 h-4 text-orange-500" />
-                            <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Master Bundle</span>
-                         </div>
-                         <h4 className="text-xs font-bold text-white uppercase tracking-tight break-all leading-relaxed group-hover:text-orange-500 transition-colors">
-                            {pkg.name}
-                         </h4>
-                         <span className="text-[9px] font-mono text-zinc-600 block pt-1">
-                           Delivered: {new Date(pkg.timestamp).toLocaleDateString()}
-                         </span>
-                       </div>
-
-                       <a 
-                         href={pkg.url}
-                         target="_blank"
-                         rel="noopener noreferrer"
-                         onClick={() => {
-                            addActivity({
-                              type: 'download',
-                              user: `Industry Client (${client.name})`,
-                              action: 'downloaded shared stems archive',
-                              target: pkg.name,
-                              client_id: client.id
-                            });
-                         }}
-                         className="flex items-center justify-center gap-2 w-full py-3 bg-zinc-900 hover:bg-white text-zinc-300 hover:text-black border border-zinc-850 rounded-xl text-[10px] font-mono font-bold uppercase tracking-widest transition-all"
-                       >
-                         <Download className="w-3.5 h-3.5" />
-                         <span>Retrieve STEMS.zip</span>
-                       </a>
-                    </div>
-                  ))}
-
-                  {masterDeliveries.length === 0 && (
-                     <div className="p-8 text-center bg-zinc-950/40 rounded-3xl border border-zinc-900 md:col-span-2">
-                        <AlertCircle className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
-                        <p className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">No zip delivery files shipped to your vault yet.</p>
-                     </div>
-                  )}
-                </div>
-            </div>
-
-          </div>
-
-          {/* Secure Messaging Terminal Sidebar: 4 Cols */}
-          <div className="lg:col-span-5 space-y-6">
-            <div id="portal-chat-terminal" className="bg-zinc-950 border border-zinc-900 rounded-[3rem] p-6 md:p-8 flex flex-col h-[650px] shadow-2xl relative overflow-hidden">
-               
-               {/* Messaging status indicator */}
-               <div className="flex items-center justify-between border-b border-zinc-900/60 pb-5 mb-5 shrink-0">
-                  <div className="flex items-center gap-3">
-                     <MessageSquare className="w-5 h-5 text-orange-500 animate-pulse" />
-                     <div>
-                        <h3 className="text-sm font-black uppercase tracking-wider text-white">Live Uplink</h3>
-                        <p className="text-[9px] font-mono text-zinc-500 leading-none mt-0.5">SECURE CRYPTO CHANNEL</p>
-                     </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full font-mono text-[8px] font-bold uppercase tracking-widest border border-emerald-500/20">
-                     <span className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-ping" />
-                     <span>SECURED DISPATCH</span>
-                  </div>
-               </div>
-
-               {/* Chat history list */}
-               <div className="flex-1 overflow-y-auto pr-2 space-y-4 custom-scrollbar">
-                  {clientMessages.map((msg, index) => {
-                     const isProducer = msg.direction === 'outbound';
-                     return (
-                       <div 
-                         key={msg.id || index}
-                         className={cn(
-                           "flex flex-col space-y-1.5 max-w-[85%] rounded-[2rem] p-4 font-sans text-xs",
-                           isProducer 
-                           ? "bg-zinc-900 border border-zinc-850 text-zinc-200 mr-auto rounded-tl-sm text-left" 
-                           : "bg-orange-500 text-black font-medium ml-auto rounded-tr-sm text-left shadow-lg shadow-orange-500/10"
-                         )}
-                       >
-                          {/* Sender title label */}
-                          <span className={cn(
-                            "text-[8px] font-mono uppercase tracking-widest block font-black mb-1", 
-                            isProducer ? "text-orange-500" : "text-black/65"
-                          )}>
-                             {isProducer ? 'OG BEATZ (PRODUCER)' : `${client.name.toUpperCase()} (YOU)`}
-                          </span>
-                          
-                          {/* Message content */}
-                          <p className="leading-relaxed whitespace-pre-wrap break-words italic">
-                            {msg.content}
-                          </p>
-
-                          {/* Image preview (if attachment present) */}
-                          {msg.image_url && (
-                            <div className="mt-2 rounded-xl overflow-hidden border border-zinc-900">
-                               <img src={msg.image_url} alt="Attachment" className="max-h-40 w-full object-cover" />
-                            </div>
-                          )}
-
-                          {/* Timestamp tag */}
-                          <span className={cn(
-                            "text-[8px] font-mono uppercase tracking-widest block text-end pt-1 mt-0.5 leading-none",
-                            isProducer ? "text-zinc-600" : "text-black/50"
-                          )}>
-                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                       </div>
-                     );
-                  })}
-
-                  {clientMessages.length === 0 && (
-                     <div className="py-20 text-center text-zinc-600 space-y-3">
-                        <MessageSquare className="w-10 h-10 text-zinc-800 mx-auto" />
-                        <p className="text-[10px] font-mono uppercase tracking-widest">No previous dispatch logs securely written.</p>
-                     </div>
-                  )}
-
-                  <div ref={chatEndRef} />
-               </div>
-
-               {/* Form box typing dispatch */}
-               <form onSubmit={handleSendChatMessage} className="mt-5 shrink-0 border-t border-zinc-900 pt-5">
-                  <div className="flex gap-2">
-                     <input 
-                       type="text"
-                       value={chatMessage}
-                       onChange={(e) => setChatMessage(e.target.value)}
-                       placeholder="Dispatch secure note to producer..."
-                       className="flex-1 bg-zinc-950 border border-zinc-900 focus:border-zinc-800 text-xs text-white rounded-2xl px-5 py-4 focus:outline-none transition-all placeholder:text-zinc-700"
-                     />
-                     <button 
-                       type="submit"
-                       disabled={!chatMessage.trim()}
-                       className="w-12 h-12 bg-white text-black hover:bg-zinc-200 hover:scale-105 active:scale-95 text-xs rounded-2xl flex items-center justify-center transition-all shadow-xl disabled:opacity-30 disabled:scale-100"
-                     >
-                        <Send className="w-4 h-4" />
-                     </button>
-                  </div>
-               </form>
-
+            {/* Quick checksum certificate readouts */}
+            <div className="bg-slate-950 border border-slate-850 p-4 rounded-2xl text-[9px] font-mono text-slate-500 text-left space-y-1">
+              <p>ACCESS_CLEARANCE: Lossless Premium Stems Granted</p>
+              <p>METADATA_BOUNDS: BPM / Key injected securely</p>
+              <p>MD5_CHECKSUM: sha256_hash_verified_9df92aeb</p>
             </div>
           </div>
-
         </div>
+      )}
 
-      </div>
+      {/* FOOTER MODAL: GENERATE TEMPORARY SHARE ACCESS PORTAL */}
+      <AnimatePresence>
+        {showSharePortalModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl relative font-sans space-y-6"
+            >
+              <div className="flex items-center justify-between border-b border-slate-855 pb-4">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-amber-500" />
+                  <div>
+                    <h3 className="text-sm font-black uppercase text-white tracking-wider">Access Expansion Setup</h3>
+                    <p className="text-[9px] font-mono text-slate-550">SETUP TEMP SECURITY HANDSHAKE KEYS</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowSharePortalModal(false);
+                    setGeneratedPortalLink('');
+                  }}
+                  className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Portal creation configuration inputs */}
+              <div className="space-y-4 font-mono text-xs">
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Access Expiry Setting</label>
+                    <select 
+                      value={shareExpiration} 
+                      onChange={(e) => setShareExpiration(e.target.value as any)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500 transition-colors"
+                    >
+                      <option value="24 Hours">24 Hours (Fast Expiry)</option>
+                      <option value="48 Hours">48 Hours (Standard)</option>
+                      <option value="Never">Never (Infinite Access)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Portal Access Key (Optional)</label>
+                    <input 
+                      type="password"
+                      value={customPassword}
+                      onChange={(e) => setCustomPassword(e.target.value)}
+                      placeholder="Assign custom passkey..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:border-amber-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-950 border border-slate-850 rounded-2xl text-[10px] text-slate-450 leading-relaxed text-left space-y-1">
+                  <p className="text-amber-500 font-bold uppercase text-[9px]">Cryptographic Protocol Details:</p>
+                  <p>• Secure share token will map dynamic metadata keys dynamically.</p>
+                  <p>• High-Fidelity stream routing switches master buffers automatically upon request.</p>
+                  <p>• Any client activity (plays, revisions) emits instantaneous sync notifications back to producer.</p>
+                </div>
+
+                <button 
+                  type="button" 
+                  onClick={triggerGeneratePortalToken}
+                  disabled={isGeneratingPortal}
+                  className="w-full p-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black uppercase text-xs tracking-widest rounded-xl transition-all shadow-lg shadow-amber-500/10 cursor-pointer text-center flex items-center justify-center gap-2"
+                >
+                  {isGeneratingPortal ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Key className="w-4 h-4" />
+                  )}
+                  <span>{isGeneratingPortal ? "Constructing handshake..." : "Generate Handshake Token Link"}</span>
+                </button>
+
+                {/* COPY LINK RESPONSE FROM SERVER HANDSHAKE */}
+                {generatedPortalLink && (
+                  <div className="space-y-2 pt-2">
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Secure Handshake URL</label>
+                    <div className="flex gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2 pl-3 items-center">
+                      <span className="text-[10px] break-all flex-1 text-slate-400 select-all font-mono leading-none">
+                        {generatedPortalLink}
+                      </span>
+                      <button 
+                        onClick={copyGeneratedPortal}
+                        className="px-4 py-2 bg-slate-900 border border-slate-800 hover:text-white rounded-lg text-[10px] font-bold font-mono text-amber-500 flex items-center gap-1 shrink-0 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Copy Link</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

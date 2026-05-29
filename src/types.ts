@@ -34,7 +34,6 @@ export interface Client {
   id: string;
   name: string;
   email: string;
-  avatar_url?: string;
   status: 'online' | 'offline' | 'away';
   last_active: string;
   tags: string[];
@@ -58,7 +57,7 @@ export interface ShareLink {
 
 export interface Activity {
   id: string;
-  type: 'play' | 'download' | 'share' | 'social' | 'system' | 'message' | 'upload' | 'like' | 'comment';
+  type: 'play' | 'download' | 'share' | 'social' | 'system' | 'message' | 'upload';
   user: string;
   action: string;
   target?: string;
@@ -91,7 +90,6 @@ export interface UserProfile {
     instagram?: string;
     spotify?: string;
     twitter?: string;
-    soundcloud?: string;
   };
 }
 

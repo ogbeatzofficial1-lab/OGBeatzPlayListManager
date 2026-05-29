@@ -1,7 +1,13 @@
 import React from 'react';
 import { 
-  LayoutDashboard, Music, Users, MessageSquare, 
-  Settings, Activity, Share2, Video 
+  LayoutDashboard, 
+  Music, 
+  Users, 
+  MessageSquare, 
+  Settings, 
+  Activity,
+  Share2,
+  Video
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -15,7 +21,7 @@ export default function Shell({ children, activeView, onViewChange }: ShellProps
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'tracks', label: 'Tracks', icon: Music },
-    { id: 'playlists', label: 'Playlists', icon: LayoutDashboard },
+    { id: 'playlists', label: 'Playlists', icon: LayoutDashboard }, // Using LayoutDashboard for playlists for now
     { id: 'clients', label: 'Clients', icon: Users },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'videos', label: 'Videos', icon: Video },
@@ -25,10 +31,10 @@ export default function Shell({ children, activeView, onViewChange }: ShellProps
   ];
 
   return (
-    <div className="flex h-screen w-screen bg-black text-white overflow-hidden">
-      {/* Sidebar - Fixed width */}
-      <aside className="w-64 border-r border-zinc-800 flex flex-col p-6 bg-black shrink-0">
-        <div className="flex items-center gap-3 px-2 mb-8">
+    <div className="flex h-screen bg-black text-white">
+      {/* Sidebar */}
+      <aside className="w-64 border-r border-zinc-900 flex flex-col p-6 space-y-8">
+        <div className="flex items-center gap-3 px-2">
           <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
             <Music className="text-black w-5 h-5" />
           </div>
@@ -54,15 +60,9 @@ export default function Shell({ children, activeView, onViewChange }: ShellProps
         </nav>
       </aside>
 
-      {/* Main Content - Forced to visible */}
-      <main className="flex-1 overflow-y-auto bg-black relative">
-        <div className="h-full w-full">
-          {children || (
-            <div className="flex items-center justify-center h-full text-zinc-500">
-              Loading workspace...
-            </div>
-          )}
-        </div>
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto bg-black">
+        {children}
       </main>
     </div>
   );

@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Track, Playlist, Client, Activity, ShareLink, UserProfile, Message, PromoVideo } from '@/src/types';
 import { getSupabaseClient } from "@/src/lib/supabase";
-import { analyzeTrackWithGemini, pullLyricsWithGemini } from "@/src/services/geminiService";
 
 interface MediaStoreContextType {
   tracks: Track[];
@@ -29,8 +28,7 @@ interface MediaStoreContextType {
   addShareLink: (link: Partial<ShareLink>) => Promise<ShareLink>;
   getShareContent: (token: string) => Promise<{ track?: Track, playlist?: Playlist, link: ShareLink } | null>;
   addActivity: (activity: Partial<Activity>) => Promise<void>;
-  analyzeTrack: (name: string) => Promise<{ bpm: number, key: string, duration?: number, tags?: string[] }>;
-  pullLyrics: (trackInfo: any, rawLyricsText?: string) => Promise<{ text: string; startTime: number; endTime: number; }[] | null>;
+  analyzeTrack: (name: string) => Promise<{ bpm: number, key: string, duration?: number }>;
   messages: Message[];
   sendMessage: (clientId: string, content: string, image_url?: string | null, direction?: 'inbound' | 'outbound') => Promise<void>;
   promoVideos: PromoVideo[];
@@ -1430,30 +1428,37 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     const duration = 120 + (cleanName.length * 3) % 111;
 
     try {
-      const data = await analyzeTrackWithGemini(name);
-      if (data && typeof data.bpm === 'number' && typeof data.key === 'string' && Array.isArray(data.tags)) {
-        addToast("AI Analysis completed successfully via client-side Gemini!", 'success');
-        
-        // Build combined tags with vocal/instrumental indicator and SEO keywords
-        const typeTag = data.instrumental ? "Instrumental" : "Vocal Track";
-        const rawKeywords: string[] = Array.isArray(data.seo_keywords) ? data.seo_keywords : [];
-        // clean keywords to be shorter tags
-        const seoTags = rawKeywords.map((k: string) => k.length > 20 ? k.substring(0, 18) + '...' : k);
-        const combinedTags = [
-          typeTag,
-          ...data.tags,
-          ...seoTags
-        ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
-        
-        return {
-          bpm: data.bpm,
-          key: data.key,
-          duration,
-          tags: combinedTags
-        };
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: name })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && typeof data.bpm === 'number' && typeof data.key === 'string' && Array.isArray(data.tags)) {
+          addToast("AI Analysis completed successfully via Gemini on the server!", 'success');
+          
+          // Build combined tags with vocal/instrumental indicator and SEO keywords
+          const typeTag = data.instrumental ? "Instrumental" : "Vocal Track";
+          const rawKeywords: string[] = Array.isArray(data.seo_keywords) ? data.seo_keywords : [];
+          // clean keywords to be shorter tags
+          const seoTags = rawKeywords.map(k => k.length > 20 ? k.substring(0, 18) + '...' : k);
+          const combinedTags = [
+            typeTag,
+            ...data.tags,
+            ...seoTags
+          ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+          
+          return {
+            bpm: data.bpm,
+            key: data.key,
+            duration,
+            tags: combinedTags
+          };
+        }
       }
     } catch (e: any) {
-      console.warn("Could not reach client-side Gemini analyzer, performing offline heuristic fallback:", e.message);
+      console.warn("Could not reach server-side Gemini analyzer, performing offline heuristic fallback:", e.message);
     }
 
     const cleanLower = cleanName.toLowerCase();
@@ -1528,21 +1533,6 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     return { bpm, key, duration, tags: uniqueTags };
   };
 
-  const pullLyrics = async (trackInfo: any, rawLyricsText?: string): Promise<{ text: string; startTime: number; endTime: number; }[] | null> => {
-    try {
-      addToast(rawLyricsText ? "Aligning your official lyrics with AI..." : "Transcribing song lyrics structure with AI...", "info");
-      const result = await pullLyricsWithGemini(trackInfo, rawLyricsText);
-      if (result && Array.isArray(result)) {
-        addToast("Vocal transcription completed successfully!", "success");
-        return result;
-      }
-    } catch (e: any) {
-      console.error("Lyric syncing failure in client-side handler:", e);
-      addToast(`Engine connection issue: ${e.message}`, "error");
-    }
-    return null;
-  };
-
   const uploadFile = async (bucket: string, file: File): Promise<string | null> => {
     if (!supabase) {
       console.warn("Supabase not initialized for uploading.");
@@ -1583,7 +1573,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     <MediaStoreContext.Provider value={{
       tracks, playlists, clients, activities, profile, loading, loadingProgress, loadingStatusText, shareLinks, messages, promoVideos,
       addTrack, updateTrack, deleteTrack, addPlaylist, updatePlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist,
-      addClient, updateClient, deleteClient, updateProfile, addShareLink, getShareContent, addActivity, analyzeTrack, pullLyrics, sendMessage, addPromoVideo, deletePromoVideo, incrementShareLinkAccess,
+      addClient, updateClient, deleteClient, updateProfile, addShareLink, getShareContent, addActivity, analyzeTrack, sendMessage, addPromoVideo, deletePromoVideo, incrementShareLinkAccess,
       uploadFile,
       toasts, addToast, removeToast, connected
     }}>
