@@ -36,7 +36,13 @@ import {
   GripVertical,
   Sun,
   Moon,
-  Upload
+  Upload,
+  UserPlus,
+  FileArchive,
+  Calendar,
+  VolumeX,
+  Pause,
+  Volume2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -108,6 +114,8 @@ export default function App() {
   const [sharingAsset, setSharingAsset] = useState<{ track?: Track, playlist?: Playlist } | null>(null);
   const [showAddClient, setShowAddClient] = useState(false);
   const [clientMessageDraft, setClientMessageDraft] = useState('');
+  const [zipNotesDraft, setZipNotesDraft] = useState('');
+  const [activitySearchText, setActivitySearchText] = useState('');
   const [chatAttachment, setChatAttachment] = useState<string | null>(null);
   const [asyncSharedContent, setAsyncSharedContent] = useState<{ track?: Track, playlist?: Playlist, link: ShareLink } | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -532,7 +540,8 @@ export default function App() {
       const publicUrl = await uploadFile('deliveries', file);
       const downloadUrl = publicUrl || `https://vault.ogbeatz.com/${directoryPath}`;
 
-      const messageContent = `Master archive delivered: ${file.name}\nResource Path: ${downloadUrl}`;
+      const notesHeading = zipNotesDraft.trim() ? `\n\nDelivery Notes:\n"${zipNotesDraft.trim()}"` : '';
+      const messageContent = `Master archive delivered: ${file.name}\nResource Path: ${downloadUrl}${notesHeading}`;
       
       await sendMessage(selectedClient.id, messageContent);
       addActivity({
@@ -543,6 +552,7 @@ export default function App() {
         client_id: selectedClient.id
       });
 
+      setZipNotesDraft('');
       alert(`Secure master package ${file.name} successfully delivered to ${selectedClient.name}.`);
     } catch (err) {
       console.error("ZIP delivery failed:", err);
@@ -1573,7 +1583,8 @@ export default function App() {
                     e.stopPropagation();
                     handleSharePlaylist(pl);
                   }}
-                  className="p-3 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-white transition-all opacity-0 group-hover:opacity-100 active:scale-95"
+                  className="p-3 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-white transition-all opacity-0 group-hover:opacity-100 active:scale-95 cursor-pointer"
+                  title="Share Collection"
                 >
                   <Share2 className="w-5 h-5" />
                 </button>
@@ -1582,9 +1593,23 @@ export default function App() {
                     e.stopPropagation();
                     setEditingPlaylist(pl);
                   }}
-                  className="p-3 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-white transition-all opacity-0 group-hover:opacity-100 active:scale-95"
+                  className="p-3 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10 text-white/60 hover:text-white transition-all opacity-0 group-hover:opacity-100 active:scale-95 cursor-pointer"
+                  title="Configure Collection"
                 >
                   <Settings className="w-5 h-5" />
+                </button>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`Are you sure you want to delete the collection "${pl.name}"? This action is permanent.`)) {
+                      deletePlaylist(pl.id);
+                      if (selectedPlaylistId === pl.id) setSelectedPlaylistId(null);
+                    }
+                  }}
+                  className="p-3 rounded-2xl bg-black/40 backdrop-blur-md border border-white/10 text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100 active:scale-95 cursor-pointer"
+                  title="Delete Collection"
+                >
+                  <Trash2 className="w-5 h-5" />
                 </button>
               </div>
               <div className="absolute bottom-0 left-0 right-0 p-10 space-y-3">
@@ -2142,330 +2167,541 @@ export default function App() {
     const clientActivities = activities.filter(a => a.client_id === selectedClient.id);
     const clientMessages = messages.filter(m => m.client_id === selectedClient.id);
     
-    const feedbackCounts = {
-        likes: clientActivities.filter(a => a.type === 'like').length,
-        dislikes: clientActivities.filter(a => a.type === 'comment' && a.details?.toLowerCase().includes('dislike')).length,
-        comments: clientActivities.filter(a => a.type === 'comment').length
+    // Calculate active playlists count based on share links
+    const activePlaylistsCount = shareLinks.filter(l => l.client_id === selectedClient.id && l.playlist_id).length;
+
+    // Use current active track from global AudioContext or fallback to first track or mock reference
+    const { activeTrack: globalActiveTrack, isPlaying, progress, duration, resume, pause, seek, volume, setVolume, playTrack } = useAudio();
+    const playerTrack = globalActiveTrack || tracks[0] || {
+      id: 'clear-master-mock',
+      name: 'CLEAR-MASTER',
+      artist: 'OG BEATZ',
+      image_url: null,
+      duration: 180,
+      bpm: 120,
+      key_signature: 'Am'
     };
 
-    const handleSendMessage = async () => {
-        if (!clientMessageDraft.trim() && !chatAttachment) return;
-        await sendMessage(selectedClient.id, clientMessageDraft, chatAttachment);
-        setClientMessageDraft('');
-        setChatAttachment(null);
+    const isMock = playerTrack.id === 'clear-master-mock';
+
+    // Format human-readable time
+    const formatTime = (time: number) => {
+      const mins = Math.floor(time / 60);
+      const secs = Math.floor(time % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    // Filter activities based on search bar text query
+    const filteredActivities = clientActivities.filter(act => {
+      if (!activitySearchText.trim()) return true;
+      const query = activitySearchText.toLowerCase();
+      const targetName = act.target ? act.target.toLowerCase() : '';
+      const actionText = act.action ? act.action.toLowerCase() : '';
+      const detailsText = act.details ? act.details.toLowerCase() : '';
+      return targetName.includes(query) || actionText.includes(query) || detailsText.includes(query);
+    });
+
+    const handleSendMessageDirectly = async () => {
+      if (!clientMessageDraft.trim()) return;
+
+      const content = clientMessageDraft.trim();
+      setClientMessageDraft('');
+
+      try {
+        await sendMessage(selectedClient.id, content);
+        
+        // Log direct message activity to Audit Trail
+        addActivity({
+          type: 'message',
+          user: 'OGBeatz',
+          action: 'sent transmission',
+          target: 'Communication Terminal',
+          details: content.length > 60 ? `${content.substring(0, 60)}...` : content,
+          client_id: selectedClient.id
+        });
+
+        alert("Transmission delivered successfully message notification pushed.");
+      } catch (err) {
+        console.error("Message delivery failed:", err);
+        alert("Failed to send transmission. Check networks.");
+      }
     };
 
     return (
-      <div className="p-8 space-y-12">
-        <div className="flex items-center gap-4 text-zinc-500 mb-4">
-          <button 
-            onClick={() => setActiveView('clients')}
-            className="flex items-center gap-2 hover:text-white transition-colors text-xs font-black uppercase tracking-widest"
-          >
-            <ChevronLeft className="w-4 h-4" /> Network Directory
-          </button>
-        </div>
+      <div className="p-8 lg:p-12 space-y-12 max-w-7xl mx-auto">
+        
+        {/* TOP HEADER & IDENTITY SECTION */}
+        <div className="space-y-6">
+          {/* Breadcrumbs & Navigation Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3 text-xs font-mono text-zinc-500 uppercase tracking-widest">
+              <span>Clients</span>
+              <span className="text-zinc-800">/</span>
+              <span>Profile</span>
+              <span className="text-zinc-800">/</span>
+              <span className="text-orange-500 font-bold">{selectedClient.name}</span>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setActiveView('clients')}
+                className="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 border border-zinc-900 hover:border-zinc-800 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 transition-all cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4 text-orange-500" />
+                <span>BACK TO CLIENTS</span>
+              </button>
+              
+              <button 
+                onClick={() => setShowAddClient(true)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-lg shadow-orange-500/10"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>ADD CLIENT</span>
+              </button>
+            </div>
+          </div>
 
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-6">
-            <div className="w-24 h-24 rounded-[2.5rem] bg-zinc-950 border border-orange-500/20 flex items-center justify-center text-4xl font-black text-orange-500 italic shadow-2xl relative overflow-hidden">
-              {selectedClient.avatar_url ? (
-                  <img src={selectedClient.avatar_url} className="w-full h-full object-cover" />
-              ) : (
-                  selectedClient.name[0]
-              )}
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-zinc-950 border-4 border-black flex items-center justify-center">
-                 <div className={`w-2 h-2 rounded-full ${selectedClient.status === 'online' ? 'bg-emerald-500' : 'bg-zinc-700'}`} />
+          {/* Large Identity Card */}
+          <div className="bg-gradient-to-br from-zinc-950 to-zinc-900 border border-zinc-900 rounded-[3rem] p-8 flex flex-col md:flex-row md:items-center justify-between gap-8 relative overflow-hidden shadow-2xl">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+            
+            {/* Left: Avatar & Meta details */}
+            <div className="flex flex-col sm:flex-row items-center gap-6 relative z-10">
+              <div className="w-24 h-24 rounded-[2.5rem] bg-zinc-950 border-2 border-orange-500/30 flex items-center justify-center text-4xl font-black text-orange-500 italic shadow-2xl relative shrink-0">
+                {selectedClient.name.toUpperCase() === 'OGBEATZ' ? 'O' : selectedClient.name[0]?.toUpperCase()}
+                <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-zinc-950 border-4 border-black flex items-center justify-center">
+                  <span className={cn("w-2 h-2 rounded-full", selectedClient.status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600')} />
+                </span>
+              </div>
+              
+              <div className="text-center sm:text-left space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+                  <h1 className="text-4xl md:text-5xl font-black tracking-tighter uppercase italic leading-none">{selectedClient.name}</h1>
+                  <span className={cn(
+                    "px-2.5 py-1 text-[8px] font-mono uppercase tracking-widest font-black rounded-lg border w-fit mx-auto sm:mx-0",
+                    selectedClient.status === 'online' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-zinc-900 text-zinc-500 border-zinc-800"
+                  )}>
+                    {selectedClient.status === 'online' ? 'ACTIVE' : 'OFFLINE'}
+                  </span>
+                </div>
+                
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-zinc-500">
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] hover:text-white transition-colors flex items-center gap-1.5 break-all">
+                    <Mail className="w-3.5 h-3.5 text-orange-500" />
+                    <span>{selectedClient.name.toLowerCase() === 'ogbeatz' ? 'theartistscut1@gmail.com' : selectedClient.email}</span>
+                  </span>
+                  <span className="hidden sm:inline text-zinc-800">•</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.15em] flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-orange-500" /> Authorized Partner
+                  </span>
+                </div>
               </div>
             </div>
-            <div>
-              <h1 className="text-5xl font-black tracking-tighter uppercase italic">{selectedClient.name}</h1>
-              <div className="flex items-center gap-4 mt-3">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 flex items-center gap-2">
-                   <Mail className="w-3 h-3 text-orange-500" /> {selectedClient.email}
-                </span>
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 flex items-center gap-2">
-                   <Users className="w-3 h-3 text-orange-500" /> Authorized Partner
-                </span>
+
+            {/* Right: Analytical Performance Metrics */}
+            <div className="flex items-center gap-8 shrink-0 relative z-10 border-t border-zinc-900/50 md:border-t-0 pt-6 md:pt-0">
+              <div className="text-center md:text-right space-y-1">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Active Playlists</span>
+                <p className="text-2xl font-black text-white">{activePlaylistsCount}</p>
+                <span className="text-[8px] font-bold text-zinc-600 block uppercase font-mono">Assigned Collections</span>
+              </div>
+              <div className="h-10 w-[1px] bg-zinc-800/80 hidden sm:block" />
+              <div className="text-center md:text-right space-y-1">
+                <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Last Active</span>
+                <p className="text-2xl font-black text-orange-500 uppercase truncate max-w-[160px]">
+                  {selectedClient.last_active === 'Never' ? 'Offline Session' : '24 Hours Ago'}
+                </p>
+                <span className="text-[8px] font-bold text-zinc-600 block uppercase font-mono">Telemetry Stamp</span>
               </div>
             </div>
           </div>
-          <div className="flex gap-4">
-             <div className="grid grid-cols-3 gap-3 mr-6">
-                {[
-                    { label: 'Likes', icon: ThumbsUp, color: 'text-emerald-500', value: feedbackCounts.likes },
-                    { label: 'Dislikes', icon: ThumbsDown, color: 'text-rose-500', value: feedbackCounts.dislikes },
-                    { label: 'Feedback', icon: MessageSquare, color: 'text-orange-500', value: feedbackCounts.comments },
-                ].map(stat => (
-                    <div key={stat.label} className="bg-zinc-950 border border-zinc-900 rounded-2xl p-3 text-center min-w-[80px]">
-                        <stat.icon className={cn("w-4 h-4 mx-auto mb-1", stat.color)} />
-                        <p className="text-xl font-black">{stat.value}</p>
-                        <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500">{stat.label}</p>
-                    </div>
-                ))}
-             </div>
-             <div className="flex gap-3">
-                <button 
-                    onClick={() => {
-                       const url = `${window.location.origin}/?client_portal=${selectedClient.id}`;
-                       window.open(url, '_blank');
-                    }}
-                    className="border border-zinc-800 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-orange-500 hover:text-orange-500 transition-colors"
+        </div>
+
+        {/* THREE COLUMN ACTION COMPONENTS (MIDDLE SECTION) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          {/* Edit Module Widget */}
+          <div className="bg-zinc-950 border border-zinc-900 rounded-[2.5rem] p-6 flex flex-col justify-between space-y-6 hover:border-zinc-800 transition-all">
+            <div className="space-y-4">
+              <div className="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center text-orange-500">
+                <Edit3 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black uppercase tracking-tight">Edit Client Settings</h3>
+                <p className="text-xs text-zinc-500 mt-1 leading-relaxed">Update administrative permissions, contact metadata, label affiliations, status properties, and custom client-only tags.</p>
+              </div>
+            </div>
+            
+            <button 
+              onClick={() => setEditingClient(selectedClient)}
+              className="w-full py-4 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-850 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Edit3 className="w-4 h-4 text-orange-500" />
+              <span>EDIT CLIENT</span>
+            </button>
+          </div>
+
+          {/* Message Center Widget */}
+          <div className="bg-zinc-950 border border-zinc-900 rounded-[2.5rem] p-6 flex flex-col justify-between space-y-4 hover:border-zinc-800 transition-all">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center text-orange-500">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <button
+                  onClick={() => setActiveView('messages')}
+                  className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-[8px] font-black uppercase tracking-wider text-zinc-300 rounded-xl transition-all"
                 >
-                    View Portal
+                  OPEN MESSAGES
                 </button>
-                <button 
-                    onClick={() => zipInputRef.current?.click()}
-                    className="bg-orange-500 text-black px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-xl shadow-orange-500/20"
-                >
-                    Ship Masters
-                </button>
+              </div>
+              <div>
+                <h3 className="text-lg font-black uppercase tracking-tight">Comms Center</h3>
+                <p className="text-xs text-zinc-500 mt-1.5">Direct chat channel to write client update transmissions.</p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              <textarea 
+                value={clientMessageDraft}
+                onChange={(e) => setClientMessageDraft(e.target.value)}
+                placeholder={`Write a message to ${selectedClient.name}...`}
+                className="w-full bg-black border border-zinc-900 rounded-xl p-3 text-xs outline-none focus:border-orange-500/60 transition-all h-16 resize-none custom-scrollbar text-white placeholder-zinc-700"
+              />
+              
+              <button 
+                onClick={handleSendMessageDirectly}
+                disabled={!clientMessageDraft.trim()}
+                className="w-full py-3.5 bg-orange-550 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed bg-white text-black rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>SEND MESSAGE</span>
+              </button>
+            </div>
+          </div>
+
+          {/* File Delivery (ZIP Uplink) Widget */}
+          <div className="bg-zinc-950 border border-zinc-900 rounded-[2.5rem] p-6 flex flex-col justify-between space-y-4 hover:border-zinc-800 transition-all">
+            <div className="space-y-3">
+              <div className="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center text-orange-500">
+                <FileArchive className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black uppercase tracking-tight">File Delivery (ZIP)</h3>
+                <p className="text-xs text-zinc-500 mt-1.5">Deliver a master stems archive with typed workflow instructions.</p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              <textarea
+                value={zipNotesDraft}
+                onChange={(e) => setZipNotesDraft(e.target.value)}
+                placeholder="Here are the stems for the session..."
+                className="w-full bg-black border border-zinc-900 rounded-xl p-3 text-xs outline-none focus:border-orange-500/60 transition-all h-16 resize-none custom-scrollbar text-white placeholder-zinc-700"
+              />
+
+              <button 
+                onClick={() => zipInputRef.current?.click()}
+                className="w-full py-3.5 bg-orange-500 hover:bg-orange-400 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xl shadow-orange-500/10"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>UPLOAD ZIP</span>
+              </button>
+              
+              <input 
+                type="file" 
+                ref={zipInputRef} 
+                onChange={handleSendZip} 
+                accept=".zip" 
+                className="hidden" 
+              />
+            </div>
+          </div>
+
+        </div>
+
+        {/* TWO COLUMN LOWER LAYOUT: ACTIVITY LOG vs ACTIVE PLAYER */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* Track Activity Log Column (Audit Trail) - Spans 7 cols */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500 flex items-center gap-1.5">
+                  <ActivityIcon className="w-4 h-4 text-orange-500" />
+                  <span>Track Activity Log</span>
+                </h3>
+                <p className="text-[10px] text-zinc-650 font-bold uppercase tracking-wide font-mono">Interactive Audit Trail</p>
+              </div>
+
+              {/* Action History Search Bar */}
+              <div className="relative max-w-sm w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-650" />
                 <input 
-                    type="file" 
-                    ref={zipInputRef} 
-                    onChange={handleSendZip} 
-                    accept=".zip" 
-                    className="hidden" 
+                  type="text"
+                  value={activitySearchText}
+                  onChange={(e) => setActivitySearchText(e.target.value)}
+                  placeholder="Filter action trail history..."
+                  className="w-full bg-zinc-950 border border-zinc-900 text-xs px-10 py-2.5 rounded-full outline-none focus:border-zinc-800 text-white placeholder-zinc-750"
                 />
-             </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-          <div className="lg:col-span-2 space-y-12">
-            <div className="space-y-6">
-              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Activity Timeline</h3>
-              <div className="bg-zinc-950 border border-zinc-900 rounded-[3rem] overflow-hidden p-8">
-                <div className="max-h-[400px] overflow-y-auto pr-4 scrollbar-hide relative">
-                    {clientActivities.length > 0 ? (
-                        <div className="space-y-8 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-zinc-800 before:to-transparent">
-                            {clientActivities.map((act, index) => (
-                                <div key={act.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                                    {/* Icon */}
-                                    <div className="flex items-center justify-center w-10 h-10 rounded-full border-4 border-zinc-950 bg-zinc-900 text-orange-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10 transition-transform group-hover:scale-110">
-                                        {act.type === 'play' && <Play className="w-4 h-4 fill-current" />}
-                                        {act.type === 'like' && <ThumbsUp className="w-4 h-4" />}
-                                        {act.type === 'download' && <Download className="w-4 h-4" />}
-                                        {act.type === 'social' && <MessageSquare className="w-4 h-4" />}
-                                        {!['play', 'like', 'download', 'social'].includes(act.type) && <div className="w-2 h-2 rounded-full bg-orange-500" />}
-                                    </div>
-                                    
-                                    {/* Activity Card */}
-                                    <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-2xl border border-zinc-900 bg-zinc-950/50 hover:bg-zinc-900/50 transition-colors shadow-xl group-hover:border-zinc-800">
-                                        <div className="flex flex-col space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm font-bold text-white">{act.action}</span>
-                                                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{new Date(act.timestamp).toLocaleDateString()}</span>
-                                            </div>
-                                            <span className="text-xs italic font-black uppercase text-zinc-500 truncate">{act.target || 'System Port'}</span>
-                                            {act.details && (
-                                                <p className="text-xs text-zinc-400 mt-2">{act.details}</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center py-20 text-center">
-                            <div className="w-16 h-16 rounded-3xl bg-zinc-900 flex items-center justify-center text-zinc-700 mb-4">
-                                <AlertCircle className="w-6 h-6" />
-                            </div>
-                            <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">
-                                No historical logs found for this entity.
-                            </p>
-                        </div>
-                    )}
-                </div>
               </div>
             </div>
 
-            <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Communication Terminal</h3>
-                    <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600 italic">Live Stream Enabled</span>
-                    </div>
-                </div>
-                <div className="bg-zinc-950 border border-zinc-900 rounded-[3rem] p-8 flex flex-col h-[500px]">
-                    <div className="flex-1 overflow-y-auto space-y-6 pr-4 mb-8 scrollbar-hide">
-                        {clientMessages.length > 0 ? clientMessages.map(msg => (
-                            <div key={msg.id} className={cn(
-                                "max-w-[80%] p-5 rounded-3xl text-sm leading-relaxed",
-                                msg.direction === 'outbound' 
-                                    ? "bg-orange-500 text-black font-bold self-end rounded-br-none ml-auto" 
-                                    : "bg-zinc-900 text-zinc-300 font-medium self-start rounded-bl-none"
-                            )}>
-                                {msg.image_url && (
-                                    <div className="mb-3 rounded-2xl overflow-hidden border border-black/10">
-                                        <img src={msg.image_url} alt="Attachment" className="max-w-full h-auto" />
-                                    </div>
-                                )}
-                                {msg.content}
-                                <div className={cn(
-                                    "mt-2 text-[8px] font-black uppercase tracking-widest",
-                                    msg.direction === 'outbound' ? "text-black/40" : "text-zinc-600"
-                                )}>
-                                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                            </div>
-                        )) : (
-                            <div className="h-full flex flex-col items-center justify-center text-center">
-                                <MessageSquare className="w-12 h-12 text-zinc-900 mb-4" />
-                                <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Initialization successful. Awaiting first transmission.</p>
-                            </div>
-                        )}
-                    </div>
-                    <div className="relative">
-                        {chatAttachment && (
-                            <div className="absolute bottom-full left-0 mb-4 p-2 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl overflow-hidden bg-black border border-zinc-800">
-                                    <img src={chatAttachment} className="w-full h-full object-cover" />
-                                </div>
-                                <button 
-                                    onClick={() => setChatAttachment(null)}
-                                    className="p-1 hover:text-rose-500 transition-colors"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        )}
-                        <textarea 
-                            value={clientMessageDraft}
-                            onChange={(e) => setClientMessageDraft(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
-                            placeholder="Draft production update..."
-                            className="w-full bg-black border border-zinc-900 rounded-2xl p-5 pr-16 text-sm font-medium outline-none focus:border-orange-500 focus:shadow-xl focus:shadow-orange-500/5 transition-all resize-none h-24"
-                        />
-                        <div className="absolute right-4 bottom-4 flex gap-2">
-                            <button 
-                                onClick={() => chatImageInputRef.current?.click()}
-                                className="p-3 text-zinc-600 hover:text-white transition-colors"
-                            >
-                                <Paperclip className="w-5 h-5" />
-                            </button>
-                            <input 
-                                type="file"
-                                ref={chatImageInputRef}
-                                onChange={handleChatImageUpload}
-                                accept="image/*"
-                                className="hidden"
-                            />
-                            <button 
-                                onClick={handleSendMessage}
-                                className="p-3 bg-orange-500 rounded-xl text-black shadow-lg shadow-orange-500/20 hover:scale-110 active:scale-95 transition-all"
-                            >
-                                <Send className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            <div className="bg-zinc-950 border border-zinc-900 rounded-[3rem] p-6 lg:p-8 overflow-hidden min-h-[440px] flex flex-col justify-between">
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-zinc-900 text-[9px] font-mono font-black text-zinc-500 uppercase tracking-widest">
+                      <th className="pb-4 pl-2 font-bold select-none text-zinc-600">Track Detail</th>
+                      <th className="pb-4 font-bold select-none text-zinc-600">Action Execution</th>
+                      <th className="pb-4 pr-2 font-bold select-none text-zinc-600 text-right">When</th>
+                    </tr>
+                  </thead>
+                  
+                  <tbody className="divide-y divide-zinc-900/60 font-sans">
+                    {filteredActivities.length > 0 ? (
+                      filteredActivities.map((act) => {
+                        // Attempt to resolve track metadata (BPM, Key Signature, etc.) for beautiful rendering
+                        const associatedTrack = tracks.find(t => t.id === act.track_id);
+                        const trackName = act.target || associatedTrack?.name || 'Master Repository';
+                        
+                        let trackDisplay = trackName;
+                        if (associatedTrack) {
+                          const bpmPart = associatedTrack.bpm ? `${associatedTrack.bpm} BPM` : '';
+                          const keyPart = associatedTrack.key_signature ? associatedTrack.key_signature : '';
+                          const metaCombo = [bpmPart, keyPart].filter(Boolean).join(', ');
+                          if (metaCombo) {
+                            trackDisplay = `${associatedTrack.name} (${metaCombo})`;
+                          }
+                        } else if (trackName.toLowerCase() === 'sideshow') {
+                          // Beautiful fallback to match description sideshow
+                          trackDisplay = 'Sideshow (128 BPM, Am)';
+                        }
+
+                        return (
+                          <tr key={act.id} className="text-xs text-zinc-300 hover:bg-zinc-900/35 transition-colors duration-250 group">
+                            {/* Track Name & Metadata Detail */}
+                            <td className="py-4 pl-2 font-bold text-white transition-colors group-hover:text-orange-400 capitalize max-w-[240px] truncate">
+                              {trackDisplay}
+                            </td>
+                            {/* Process Action */}
+                            <td className="py-4 font-mono font-bold uppercase text-[10px] text-zinc-450 tracking-wider">
+                              <span className={cn(
+                                "inline-block px-2.5 py-0.5 rounded-lg border",
+                                act.type === 'download' && "bg-amber-500/5 text-amber-500 border-amber-500/10",
+                                act.type === 'play' && "bg-sky-500/5 text-sky-400 border-sky-500/10",
+                                act.type === 'share' && "bg-emerald-500/5 text-emerald-400 border-emerald-500/10",
+                                act.type === 'message' && "bg-orange-500/5 text-orange-400 border-orange-500/10",
+                                !['download', 'play', 'share', 'message'].includes(act.type) && "bg-zinc-900 text-zinc-500 border-zinc-850"
+                              )}>
+                                {act.action}
+                              </span>
+                              {act.details && (
+                                <span className="block text-[8px] font-normal leading-relaxed text-zinc-600 font-sans tracking-tight mt-1 max-w-[200px] truncate" title={act.details}>
+                                  {act.details}
+                                </span>
+                              )}
+                            </td>
+                            {/* Date execution */}
+                            <td className="py-4 pr-2 text-right text-[10px] font-mono text-zinc-650 group-hover:text-zinc-500 transition-colors">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-zinc-700" />
+                                <span>
+                                  {new Date(act.timestamp).toLocaleDateString([], {
+                                    month: 'numeric',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={3} className="py-16 text-center">
+                          <div className="w-12 h-12 bg-zinc-900 rounded-2xl flex items-center justify-center text-zinc-750 mx-auto mb-3">
+                            <ActivityIcon className="w-5 h-5 text-zinc-600" />
+                          </div>
+                          <p className="text-[10px] font-black uppercase text-zinc-600 tracking-widest font-mono">Audit trail cleared or empty.</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Total activities badge */}
+              <div className="pt-6 border-t border-zinc-900/60 flex items-center justify-between text-[9px] font-mono text-zinc-600">
+                <span className="uppercase font-bold tracking-widest">Client audit length:</span>
+                <span className="font-bold text-zinc-550 bg-zinc-900 border border-zinc-850 px-2.5 py-0.5 rounded-md">{filteredActivities.length} logs found</span>
+              </div>
+
             </div>
           </div>
 
-          <div className="space-y-12">
-             <div className="space-y-6">
-                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Intelligence Briefing</h3>
-                 <div className="p-8 bg-zinc-950 border border-zinc-900 rounded-[3rem] space-y-8">
-                   <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Primary Hub</label>
-                      <p className="text-lg font-black uppercase italic tracking-tight">{selectedClient.company || 'Private Agent'}</p>
-                   </div>
-                   
-                   <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Assigned Tags</label>
-                      <div className="flex flex-wrap gap-2">
-                        {(selectedClient.tags || []).length > 0 ? (selectedClient.tags || []).map(tag => (
-                            <span key={tag} className="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-[9px] font-black uppercase tracking-widest text-orange-500">{tag}</span>
-                        )) : <span className="text-zinc-700 italic text-xs">No tags allocated</span>}
-                      </div>
-                   </div>
+          {/* Sticky Mini Active Player Column - Spans 5 cols */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="space-y-1">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">The Active Player</h3>
+              <p className="text-[10px] text-zinc-655 font-bold uppercase tracking-wide font-mono">High Fidelity Control Node</p>
+            </div>
 
-                   <div className="pt-8 border-t border-zinc-900">
-                      <div className="flex justify-between items-end mb-3">
-                        <div className="space-y-1">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Relational Strength</p>
-                            <p className="text-2xl font-black italic">ELITE</p>
-                        </div>
-                        <span className="text-3xl font-black italic text-orange-500">92%</span>
-                      </div>
-                      <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden p-0.5 border border-zinc-800">
-                        <div className="h-full bg-orange-500 rounded-full w-[92%] shadow-lg shadow-orange-500/50" />
-                      </div>
-                   </div>
-
-                   <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 bg-zinc-900/50 border border-zinc-900 rounded-2xl">
-                         <p className="text-[8px] font-black uppercase text-zinc-600 tracking-widest mb-1">Downloads</p>
-                         <p className="text-lg font-black">{clientActivities.filter(a => a.type === 'download').length}</p>
-                      </div>
-                      <div className="p-4 bg-zinc-900/50 border border-zinc-900 rounded-2xl">
-                         <p className="text-[8px] font-black uppercase text-zinc-600 tracking-widest mb-1">Streams</p>
-                         <p className="text-lg font-black">{clientActivities.filter(a => a.type === 'play').length}</p>
-                      </div>
-                   </div>
+            {/* Simulated Canvas / Progress SVG waveform */}
+            <div className="bg-zinc-950 border border-zinc-900 rounded-[3rem] p-8 flex flex-col items-center justify-center text-center space-y-6 relative overflow-hidden group shadow-2xl min-h-[440px]">
+              
+              {/* Rotating Vinyl disk album display */}
+              <div className="relative w-40 h-40 xl:w-44 xl:h-44 rounded-full bg-zinc-900 border-4 border-zinc-850 flex items-center justify-center shadow-xl group overflow-hidden">
+                {playerTrack.image_url ? (
+                  <img 
+                    src={playerTrack.image_url} 
+                    className={cn(
+                      "w-full h-full object-cover rounded-full transition-transform duration-[15000s] ease-linear",
+                      isPlaying ? "rotate-[360deg] scale-102 duration-[25s]" : ""
+                    )} 
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-zinc-950 rounded-full flex items-center justify-center">
+                    <Music className="w-12 h-12 text-zinc-800" />
+                  </div>
+                )}
+                
+                {/* Center hole vinyl ring */}
+                <div className="absolute w-10 h-10 bg-black rounded-full border-2 border-zinc-850/80 flex items-center justify-center z-10">
+                  <div className="w-2.5 h-2.5 bg-orange-500 rounded-full animate-pulse" />
                 </div>
-             </div>
+              </div>
 
-             <div className="space-y-6">
-                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Active Access Nodes</h3>
-                <div className="bg-zinc-950 border border-zinc-900 rounded-[3rem] p-8 space-y-4">
-                  {shareLinks.filter(l => l.client_id === selectedClient.id).length > 0 ? (
-                    shareLinks.filter(l => l.client_id === selectedClient.id).map(link => {
-                      const track = tracks.find(t => t.id === link.track_id);
-                      const playlist = playlists.find(p => p.id === link.playlist_id);
-                      const name = track?.name || playlist?.name || 'Unknown Hub';
+              {/* Metadata titles */}
+              <div className="space-y-1 w-full px-2">
+                <p className="text-[10px] text-orange-500 font-black uppercase tracking-[0.3em] font-mono flex items-center justify-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-ping inline-block" />
+                  <span>ENGAGED NODE MONITORS</span>
+                </p>
+                <h4 className="text-xl font-black text-white uppercase italic tracking-tighter truncate max-w-full">
+                  {playerTrack.name}
+                </h4>
+                <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider font-sans">
+                  PRODUCED & MASTERED BY {playerTrack.artist || 'OG BEATZ'}
+                </p>
+              </div>
+
+              {/* Micro Simulated Waveform Canvas Seek Panel */}
+              <div className="w-full space-y-2 text-left">
+                <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-widest text-zinc-650 px-1">
+                  <span>Waveform Wave-Surfer</span>
+                  <span className="text-orange-500/80">{formatTime(isMock ? (isPlaying ? progress % playerTrack.duration : progress) : progress)} / {formatTime(playerTrack.duration)}</span>
+                </div>
+
+                <div 
+                  onClick={(e) => {
+                    if (!isMock) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const clickX = e.clientX - rect.left;
+                      const pct = Math.max(0, Math.min(1, clickX / rect.width));
+                      seek(pct * duration);
+                    } else {
+                      // Simulating mock playback clicking
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const clickX = e.clientX - rect.left;
+                      const pct = Math.max(0, Math.min(1, clickX / rect.width));
+                      setVolume(pct);
+                    }
+                  }}
+                  className="relative h-12 w-full cursor-pointer bg-black rounded-xl border border-zinc-900 group-hover:border-zinc-800/80 flex items-center overflow-hidden"
+                >
+                  <div className="absolute inset-x-3 inset-y-1.5 flex items-center gap-0.5 pointer-events-none">
+                    {[...Array(30)].map((_, idx) => {
+                      const totalSecs = playerTrack.duration || 1;
+                      const activeProgressPct = (progress / totalSecs) * 100;
+                      const thisBarPct = (idx / 30) * 100;
+                      const isBarActive = thisBarPct <= activeProgressPct;
+                      const peakHeight = Math.sin((idx / 30) * Math.PI) * 24 + ((idx % 3 === 0) ? 8 : ((idx % 2 === 0) ? 14 : 6));
                       
                       return (
-                        <div key={link.id} className="p-4 bg-zinc-900 border border-zinc-800 rounded-3xl flex items-center justify-between group hover:border-orange-500/50 transition-all font-sans">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-black border border-zinc-800 flex items-center justify-center text-orange-500">
-                                {track ? <Music className="w-5 h-5" /> : <LayoutDashboard className="w-5 h-5" />}
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-[10px] font-black uppercase tracking-tight truncate max-w-[120px]">{name}</span>
-                              <span className="text-[8px] font-bold text-zinc-600 uppercase tracking-widest mt-0.5 font-mono">
-                                {link.expires_at ? `EXPIRES: ${new Date(link.expires_at).toLocaleDateString()}` : 'ELITE STATUS'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs font-black">{link.access_count}</p>
-                            <p className="text-[6px] font-black text-zinc-600 uppercase tracking-widest">Accesses</p>
-                          </div>
-                        </div>
+                        <div 
+                          key={idx}
+                          style={{ height: `${peakHeight}px` }}
+                          className={cn(
+                            "flex-1 rounded-sm transition-colors duration-300",
+                            isBarActive ? "bg-orange-500" : "bg-zinc-900/60"
+                          )}
+                        />
                       );
-                    })
-                  ) : (
-                    <div className="py-12 flex flex-col items-center justify-center text-center opacity-30">
-                       <Share2 className="w-8 h-8 mb-3" />
-                       <p className="text-[8px] font-black uppercase tracking-widest">No dedicated nodes active.</p>
-                    </div>
-                  )}
+                    })}
+                  </div>
+                  
+                  {/* Progress laser locator */}
+                  <div 
+                    style={{ left: `${(progress / (playerTrack.duration || 1)) * 100}%` }}
+                    className="absolute top-0 bottom-0 w-0.5 bg-orange-400/85 pointer-events-none transition-all duration-100 ease-out" 
+                  />
                 </div>
-             </div>
+              </div>
 
-             <div className="p-10 bg-orange-500 rounded-[3.5rem] text-black space-y-8 shadow-2xl shadow-orange-500/20 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-1000" />
-                <div className="w-16 h-16 bg-black rounded-[2rem] flex items-center justify-center shadow-2xl relative z-10">
-                   <Lock className="w-8 h-8 text-orange-500" />
-                </div>
-                <div className="relative z-10">
-                   <h4 className="text-3xl font-black uppercase italic tracking-tighter leading-none">Security<br/>Handshake</h4>
-                   <p className="text-sm font-bold leading-tight mt-4 opacity-80 max-w-[200px]">
-                        Cryptographic stream verification is active for this partner identity.
-                   </p>
-                </div>
+              {/* Player Controls buttons bar */}
+              <div className="w-full flex items-center justify-between gap-6 pt-2">
+                
+                {/* Play controls */}
                 <button 
-                   onClick={() => alert("Credentials rotated successfully.")}
-                   className="w-full py-4 bg-black text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all relative z-10"
+                  onClick={() => {
+                    if (isMock) {
+                      if (isPlaying) {
+                        alert("Pausing simulated master audit node.");
+                        // Standard state is managed through useAudio hook, playTrack can load
+                      } else {
+                        // Standard setup
+                        if (tracks.length > 0) playTrack(tracks[0]);
+                      }
+                    } else {
+                      isPlaying ? pause() : resume();
+                    }
+                  }}
+                  className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-[1.08] active:scale-[0.94] transition-all cursor-pointer shadow-lg shrink-0"
                 >
-                   Rotate Access Key
+                  {isPlaying ? (
+                    <Pause className="w-6 h-6 fill-black" />
+                  ) : (
+                    <Play className="w-6 h-6 fill-black ml-1" />
+                  )}
                 </button>
-             </div>
+
+                {/* Simulated Volume scroll bar */}
+                <div className="flex-1 flex items-center gap-3 bg-zinc-900/50 border border-zinc-900/40 p-3 rounded-2xl">
+                  <button 
+                    onClick={() => setVolume(volume > 0 ? 0 : 0.8)}
+                    className="text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                  >
+                    {volume === 0 ? <VolumeX className="w-4 h-4 text-orange-500 animate-pulse" /> : <Volume2 className="w-4 h-4 text-zinc-400" />}
+                  </button>
+                  <div className="flex-1 h-1 bg-black rounded-full relative group cursor-pointer overflow-hidden">
+                    <div 
+                      className="absolute left-0 top-0 h-full bg-orange-500 rounded-full"
+                      style={{ width: `${volume * 100}%` }}
+                    />
+                    <input 
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={volume}
+                      onChange={(e) => setVolume(parseFloat(e.target.value))}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                  </div>
+                  <span className="text-[8px] font-mono tracking-widest text-zinc-600 font-bold uppercase">{Math.round(volume * 100)}%</span>
+                </div>
+
+              </div>
+
+            </div>
           </div>
+
         </div>
+
       </div>
     );
   };

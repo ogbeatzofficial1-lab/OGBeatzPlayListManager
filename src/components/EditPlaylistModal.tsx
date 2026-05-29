@@ -488,7 +488,7 @@ export default function EditPlaylistModal({ playlist, onClose, onSave, onDelete,
               onClick={handleDelete}
               className="py-4 px-6 border border-zinc-900 text-rose-500 hover:bg-rose-500/10 rounded-full text-[10px] font-black uppercase tracking-widest hover:border-rose-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Trash2 className="w-3.5 h-3.5" /> Decommission Collection
+              <Trash2 className="w-3.5 h-3.5" /> Delete Collection
             </button>
           )}
 

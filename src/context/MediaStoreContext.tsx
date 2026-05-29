@@ -960,14 +960,30 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
 
   const deletePlaylist = async (id: string) => {
     setPlaylists(prev => prev.filter(pl => pl.id !== id));
+    // Clear associations in other reactive states to be fully consistent offline/online
+    setPromoVideos(prev => prev.filter(v => v.playlist_id !== id));
+    setShareLinks(prev => prev.filter(l => l.playlist_id !== id));
+
     if (supabase) {
-      const { error } = await supabase.from('playlists').delete().eq('id', id);
-      if (error) {
-        console.error(error);
-        addToast(`Failed to delete playlist from database: ${error.message}`, 'error');
-      } else {
-        addToast("Playlist deleted from database!", "success");
+      try {
+        // Cascade manually to prevent foreign key errors on legacy/unconfigured schemas
+        await supabase.from('activities').delete().eq('playlist_id', id);
+        await supabase.from('share_links').delete().eq('playlist_id', id);
+        await supabase.from('promo_videos').delete().eq('playlist_id', id);
+
+        const { error } = await supabase.from('playlists').delete().eq('id', id);
+        if (error) {
+          console.error(error);
+          addToast(`Failed to delete playlist: ${error.message}`, 'error');
+        } else {
+          addToast("Playlist and associated links/videos deleted!", "success");
+        }
+      } catch (err: any) {
+        console.error("Cascade delete for playlist failed:", err);
+        addToast(`Failed to complete playlist decommissioning: ${err.message || err}`, 'error');
       }
+    } else {
+      addToast("Collection decommissioned locally.", "success");
     }
   };
 

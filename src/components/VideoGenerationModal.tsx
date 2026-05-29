@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Video, Sparkles, Wand2, Loader2, Play, Pause, Music, Sliders, CheckCircle2, AlertCircle, Share2, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useMediaStore } from '../context/MediaStoreContext';
@@ -19,6 +19,53 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
   const [progress, setProgress] = useState(0);
   const [aesthetic, setAesthetic] = useState<any>(null);
   const [generatedVideo, setGeneratedVideo] = useState<PromoVideo | null>(null);
+
+  // Advanced Lyric Overlays and Custom Audio Clip states
+  const [overlayLyrics, setOverlayLyrics] = useState(false);
+  const [lyricsText, setLyricsText] = useState(
+    `[00:01] OG Beatz on the track\n` +
+    `[00:03] Feel the rhythm shake the floor\n` +
+    `[00:06] Synthesizing lyric visualizer\n` +
+    `[00:10] Approved for the charts\n` +
+    `[00:13] Professional master delivery`
+  );
+  const [lyricStyle, setLyricStyle] = useState<'retro' | 'serif' | 'mono' | 'impact'>('retro');
+  const [lyricColor, setLyricColor] = useState('#ffffff');
+
+  const [clipEnabled, setClipEnabled] = useState(false);
+  const [clipStart, setClipStart] = useState(0);
+  const [clipEnd, setClipEnd] = useState(15);
+  const [activeParamTab, setActiveParamTab] = useState<'aesthetics' | 'lyrics' | 'trimmer'>('aesthetics');
+
+  useEffect(() => {
+    const tDuration = track?.duration || (playlist && allTracks ? allTracks.find(item => playlist.track_ids?.includes(item.id))?.duration : 15) || 15;
+    setClipEnd(Math.round(tDuration));
+  }, [track, playlist, allTracks]);
+
+  const parsedLyrics = useMemo(() => {
+    const lines = lyricsText.split('\n');
+    const result: Array<{ time: number; text: string }> = [];
+    const timeReg = /\[(\d+):(\d+)\]/;
+    let lastTime = 0;
+    for (const line of lines) {
+      const match = line.match(timeReg);
+      if (match) {
+        const mins = parseInt(match[1], 10);
+        const secs = parseInt(match[2], 10);
+        const timeVal = mins * 60 + secs;
+        const textVal = line.replace(timeReg, '').trim();
+        result.push({ time: timeVal, text: textVal });
+        lastTime = timeVal;
+      } else {
+        const cleanLine = line.trim();
+        if (cleanLine) {
+          result.push({ time: lastTime, text: cleanLine });
+          lastTime += 3;
+        }
+      }
+    }
+    return result.sort((a, b) => a.time - b.time);
+  }, [lyricsText]);
 
   const name = track?.name || playlist?.name || 'Untitled';
   const artist = track?.artist || 'OGBeatz';
@@ -303,6 +350,76 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.font = '900 tracking-widest 7px monospace';
     ctx.fillText(`PROMO ENGINE v1.0 // MODE: ${style.toUpperCase()}`, width / 2, height - 20);
+
+    // 6. Embedded Lip Sync / Dynamic Lyric Overlay
+    if (overlayLyrics && parsedLyrics && parsedLyrics.length > 0) {
+      let activeLine = parsedLyrics[0];
+      for (let i = 0; i < parsedLyrics.length; i++) {
+        if (time >= parsedLyrics[i].time) {
+          activeLine = parsedLyrics[i];
+        } else {
+          break;
+        }
+      }
+      
+      if (activeLine && activeLine.text.trim()) {
+        ctx.save();
+        let fontName = '"Inter", sans-serif';
+        let uppercase = true;
+        let fontSize = aspect === 'vertical' ? '28px' : '36px';
+        
+        if (lyricStyle === 'retro') {
+          fontName = '"Space Grotesk", sans-serif';
+          ctx.font = `900 italic ${fontSize} ${fontName}`;
+          ctx.fillStyle = lyricColor || '#f97316';
+          ctx.shadowColor = lyricColor || '#f97316';
+          ctx.shadowBlur = 18;
+        } else if (lyricStyle === 'serif') {
+          fontName = '"Playfair Display", serif';
+          ctx.font = `italic 700 ${fontSize} ${fontName}`;
+          ctx.fillStyle = lyricColor || '#ffffff';
+          ctx.shadowColor = 'rgba(0,0,0,0.7)';
+          ctx.shadowBlur = 12;
+          uppercase = false;
+        } else if (lyricStyle === 'mono') {
+          fontName = '"JetBrains Mono", monospace';
+          ctx.font = `800 ${fontSize} ${fontName}`;
+          ctx.fillStyle = lyricColor || '#10b981';
+          ctx.shadowColor = lyricColor || '#10b981';
+          ctx.shadowBlur = 14;
+        } else {
+          fontName = '"Inter", sans-serif';
+          ctx.font = `900 ${fontSize} ${fontName}`;
+          ctx.fillStyle = lyricColor || '#ffffff';
+          ctx.shadowColor = 'rgba(0,0,0,0.9)';
+          ctx.shadowBlur = 15;
+        }
+        
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 8;
+        
+        const displayText = uppercase ? activeLine.text.toUpperCase() : activeLine.text;
+        // Place text in lower center / or vertical upper part
+        const lyricY = aspect === 'vertical' ? height * 0.45 : height * 0.5;
+        
+        const timeDelta = time - activeLine.time;
+        let scaleEffect = 1.0;
+        let opacity = 1.0;
+        
+        if (timeDelta < 0.4) {
+          scaleEffect = 0.9 + (timeDelta / 0.4) * 0.1;
+          opacity = timeDelta / 0.4;
+        }
+        
+        ctx.globalAlpha = opacity;
+        ctx.translate(width / 2, lyricY);
+        ctx.scale(scaleEffect, scaleEffect);
+        ctx.strokeText(displayText, 0, 0);
+        ctx.fillText(displayText, 0, 0);
+        ctx.restore();
+      }
+    }
   };
 
   // Pre-load audio track for low-latency Web Audio API action
@@ -366,11 +483,25 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         gainNode.connect(ctx.destination);
         sourceNodeRef.current = source;
 
-        source.loop = true;
-        const offset = pausedTimeRef.current % buffer.duration;
-        source.start(0, offset);
+        if (clipEnabled) {
+          source.loop = true;
+          source.loopStart = clipStart;
+          source.loopEnd = clipEnd;
+
+          let offset = pausedTimeRef.current;
+          if (offset < clipStart || offset > clipEnd) {
+            offset = clipStart;
+          }
+
+          source.start(0, offset, clipEnd - offset);
+          playbackStartRef.current = ctx.currentTime - (offset - clipStart);
+        } else {
+          source.loop = true;
+          const offset = pausedTimeRef.current % buffer.duration;
+          source.start(0, offset);
+          playbackStartRef.current = ctx.currentTime - offset;
+        }
         
-        playbackStartRef.current = ctx.currentTime - offset;
         setIsPlayingPreview(true);
       } else {
         // Fallback procedural visual sequencer synth
@@ -502,16 +633,22 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
       }
 
       let playbackSecs = 0;
+      const totalDur = clipEnabled ? (clipEnd - clipStart) : (activeTrack?.duration || 15);
+      
       if (audioContextRef.current && isPlayingPreview) {
         playbackSecs = audioContextRef.current.currentTime - playbackStartRef.current;
+        if (clipEnabled) {
+          playbackSecs = clipStart + (playbackSecs % Math.max(0.1, totalDur));
+        } else if (playbackSecs >= totalDur) {
+          playbackSecs = playbackSecs % totalDur;
+        }
       } else {
         playbackSecs = pausedTimeRef.current;
+        if (clipEnabled && (playbackSecs < clipStart || playbackSecs > clipEnd)) {
+          playbackSecs = clipStart;
+        }
       }
       
-      const totalDur = activeTrack?.duration || 15;
-      if (playbackSecs >= totalDur) {
-        playbackSecs = playbackSecs % totalDur;
-      }
       setCurrentTime(playbackSecs);
 
       drawMotionGraphicFrame(
@@ -519,7 +656,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         activeCanvas.width,
         activeCanvas.height,
         playbackSecs,
-        totalDur,
+        clipEnabled ? (clipEnd - clipStart) : totalDur,
         style,
         aspectRatio,
         freqs,
@@ -717,7 +854,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         if (e.data.size > 0) chunks.push(e.data);
       };
 
-      const renderDuration = finalDuration * 1000; // Track duration in ms
+      const renderDuration = (clipEnabled ? (clipEnd - clipStart) : finalDuration) * 1000; // Track duration in ms
       const startTime = performance.now();
       
       return new Promise<void>((resolve) => {
@@ -756,7 +893,13 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         };
 
         mediaRecorder.start();
-        if (audioSource) audioSource.start(0);
+        if (audioSource) {
+          if (clipEnabled) {
+            audioSource.start(0, clipStart, clipEnd - clipStart);
+          } else {
+            audioSource.start(0);
+          }
+        }
 
         const animate = (time: number) => {
           const elapsed = time - startTime;
@@ -767,14 +910,14 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
           // Draw dynamic simulated frequencies based on progress pacing
           const mockFreqs = new Uint8Array(128);
           const bpmVal = activeTrack?.bpm || 120;
-          const elapsedSeconds = elapsed / 1000;
-          const pulseValue = Math.max(0, 1 - ((elapsedSeconds * bpmVal / 60) % 1) * 2.5);
+          const timelineSecs = (elapsed / 1000) + (clipEnabled ? clipStart : 0);
+          const pulseValue = Math.max(0, 1 - ((timelineSecs * bpmVal / 60) % 1) * 2.5);
           
           for (let fi = 0; fi < mockFreqs.length; fi++) {
             if (fi < 8) {
               mockFreqs[fi] = Math.max(15, pulseValue * 255);
             } else {
-              mockFreqs[fi] = Math.max(10, Math.sin(elapsedSeconds * 4 + fi * 0.15) * 55 + 75);
+              mockFreqs[fi] = Math.max(10, Math.sin(timelineSecs * 4 + fi * 0.15) * 55 + 75);
             }
           }
 
@@ -782,8 +925,8 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
             ctx,
             canvas.width,
             canvas.height,
-            elapsedSeconds,
-            finalDuration,
+            timelineSecs,
+            clipEnabled ? (clipEnd - clipStart) : finalDuration,
             style,
             aspectRatio,
             mockFreqs,
@@ -925,69 +1068,248 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                 </div>
 
                 {/* Right Panel: Aesthetic parameters */}
-                <div className="flex flex-col justify-between space-y-8">
+                <div className="flex flex-col justify-between space-y-6">
                   <div>
                     <h3 className="text-xl font-black uppercase tracking-tight italic">Synthesis Parameters</h3>
                     <p className="text-zinc-500 text-xs mt-1 leading-relaxed">
-                      Configure structural size presets and creative style guidelines below for your Master Export.
+                      Configure high-fidelity dimensions, custom clip limits, and timed lyric typography.
                     </p>
-                  </div>
-
-                  {/* 1. Aspect Ratios Selection */}
-                  <div className="space-y-3">
-                    <label className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Select Dimensions</label>
-                    <div className="grid grid-cols-3 gap-3">
+                    
+                    {/* Tiny Elegant sub tab controls */}
+                    <div className="flex gap-1.5 p-1 bg-zinc-900/50 border border-zinc-900 rounded-2xl mt-4">
                       {[
-                        { id: 'vertical', name: 'Vertical', ratio: '9:16', icon: '📱' },
-                        { id: 'square', name: 'Square', ratio: '1:1', icon: '🟦' },
-                        { id: 'horizontal', name: 'Wide', ratio: '16:9', icon: '📺' }
-                      ].map(r => (
+                        { id: 'aesthetics', label: '🎨 Aesthetics' },
+                        { id: 'lyrics', label: '💬 Lyrics' },
+                        { id: 'trimmer', label: '✂️ Trimmer' }
+                      ].map(tab => (
                         <button
-                          key={r.id}
-                          onClick={() => setAspectRatio(r.id as any)}
-                          className={`p-3 rounded-2xl border transition-all flex flex-col items-center gap-1.5 ${
-                            aspectRatio === r.id 
-                            ? 'bg-orange-500/10 border-orange-500 text-orange-500 shadow-lg shadow-orange-500/5' 
-                            : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:border-zinc-800'
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setActiveParamTab(tab.id as any)}
+                          className={`flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
+                            activeParamTab === tab.id
+                            ? 'bg-orange-500 text-black shadow-lg shadow-orange-500/20'
+                            : 'text-zinc-500 hover:text-white bg-transparent'
                           }`}
                         >
-                          <span className="text-lg">{r.icon}</span>
-                          <div className="text-center">
-                            <div className="text-[9px] font-black uppercase tracking-wider">{r.name}</div>
-                            <div className="text-[7px] font-bold opacity-60 font-mono">{r.ratio}</div>
-                          </div>
+                          {tab.label}
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* 2. Creative Styles Grid Selector */}
-                  <div className="space-y-3">
-                    <label className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Select Creative Style</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { id: 'minimalist', name: 'Clean Chrome', icon: '✨', desc: 'Orbit lines & wave grids' },
-                        { id: 'grunge', name: 'Distressed Metal', icon: '⛓️', desc: 'Aggressive red wireframes' },
-                        { id: 'vibrant', name: 'Neon Pulse', icon: '⚡', desc: 'Neon halos & record vinyl rotate' },
-                        { id: 'abstract', name: 'Ethereal Flow', icon: '🌫️', desc: 'Fluid waves & bezier curves' }
-                      ].map(s => (
-                        <button
-                          key={s.id}
-                          onClick={() => setStyle(s.id)}
-                          className={`p-4 rounded-3xl border text-left transition-all flex flex-col gap-1.5 ${
-                            style === s.id 
-                            ? 'bg-orange-500/10 border-orange-500 text-white shadow-lg shadow-orange-500/5' 
-                            : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:border-zinc-800'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">{s.icon}</span>
-                            <span className="text-[10px] font-black uppercase tracking-wider text-white">{s.name}</span>
+                  {/* Rendering active Tab components */}
+                  <div className="flex-1 min-h-[250px] space-y-4">
+                    {activeParamTab === 'aesthetics' && (
+                      <div className="space-y-4">
+                        {/* 1. Aspect Ratios Selection */}
+                        <div className="space-y-3">
+                          <label className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Select Dimensions</label>
+                          <div className="grid grid-cols-3 gap-3">
+                            {[
+                              { id: 'vertical', name: 'Vertical', ratio: '9:16', icon: '📱' },
+                              { id: 'square', name: 'Square', ratio: '1:1', icon: '🟦' },
+                              { id: 'horizontal', name: 'Wide', ratio: '16:9', icon: '📺' }
+                            ].map(r => (
+                              <button
+                                key={r.id}
+                                type="button"
+                                onClick={() => setAspectRatio(r.id as any)}
+                                className={`p-3 rounded-2xl border transition-all flex flex-col items-center gap-1.5 ${
+                                  aspectRatio === r.id 
+                                  ? 'bg-orange-500/10 border-orange-500 text-orange-500 shadow-lg shadow-orange-500/5' 
+                                  : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:border-zinc-800'
+                                }`}
+                              >
+                                <span className="text-lg">{r.icon}</span>
+                                <div className="text-center">
+                                  <div className="text-[9px] font-black uppercase tracking-wider">{r.name}</div>
+                                  <div className="text-[7px] font-bold opacity-60 font-mono">{r.ratio}</div>
+                                </div>
+                              </button>
+                            ))}
                           </div>
-                          <p className="text-[8px] font-bold opacity-60 leading-normal">{s.desc}</p>
-                        </button>
-                      ))}
-                    </div>
+                        </div>
+
+                        {/* 2. Creative Styles Grid Selector */}
+                        <div className="space-y-3">
+                          <label className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Select Creative Style</label>
+                          <div className="grid grid-cols-2 gap-3">
+                            {[
+                              { id: 'minimalist', name: 'Clean Chrome', icon: '✨', desc: 'Orbit lines & wave grids' },
+                              { id: 'grunge', name: 'Distressed Metal', icon: '⛓️', desc: 'Aggressive red wireframes' },
+                              { id: 'vibrant', name: 'Neon Pulse', icon: '⚡', desc: 'Neon halos & record vinyl rotate' },
+                              { id: 'abstract', name: 'Ethereal Flow', icon: '🌫️', desc: 'Fluid waves & bezier curves' }
+                            ].map(s => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => setStyle(s.id)}
+                                className={`p-3 rounded-2xl border text-left transition-all flex flex-col gap-1 ${
+                                  style === s.id 
+                                  ? 'bg-orange-500/10 border-orange-500 text-white shadow-lg shadow-orange-500/5' 
+                                  : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:border-zinc-805'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm">{s.icon}</span>
+                                  <span className="text-[9px] font-black uppercase tracking-wider text-white truncate">{s.name}</span>
+                                </div>
+                                <p className="text-[8px] font-bold opacity-60 leading-normal line-clamp-1">{s.desc}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeParamTab === 'lyrics' && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-zinc-900/40 border border-zinc-900 rounded-2xl">
+                          <div>
+                            <p className="text-[10px] font-black text-white uppercase tracking-tight">Overlay Karaokes / Lyrics</p>
+                            <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">Stitch active visual typography tags</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setOverlayLyrics(!overlayLyrics)}
+                            className={`w-12 h-6 rounded-full transition-all relative ${overlayLyrics ? 'bg-orange-500' : 'bg-zinc-800'}`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${overlayLyrics ? 'right-1' : 'left-1'}`} />
+                          </button>
+                        </div>
+
+                        {overlayLyrics && (
+                          <div className="space-y-3">
+                            {/* Stylistic selector */}
+                            <div className="grid grid-cols-4 gap-1.5">
+                              {[
+                                { id: 'retro', label: 'Space' },
+                                { id: 'serif', label: 'Serif' },
+                                { id: 'mono', label: 'Neon' },
+                                { id: 'impact', label: 'Impact' }
+                              ].map(st => (
+                                <button
+                                  key={st.id}
+                                  type="button"
+                                  onClick={() => setLyricStyle(st.id as any)}
+                                  className={`py-2 px-1 rounded-xl text-[8px] font-black uppercase tracking-wider border transition-all ${
+                                    lyricStyle === st.id
+                                    ? 'bg-orange-500/10 border-orange-500 text-orange-500'
+                                    : 'bg-zinc-900/40 border-zinc-900 text-zinc-500'
+                                  }`}
+                                >
+                                  {st.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Color Picker */}
+                            <div className="flex items-center justify-between bg-zinc-900/20 p-2.5 border border-zinc-900 rounded-xl">
+                              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Typography Color</span>
+                              <div className="flex gap-1.5">
+                                {['#ffffff', '#f97316', '#10b981', '#3b82f6', '#f43f5e'].map(col => (
+                                  <button
+                                    key={col}
+                                    type="button"
+                                    onClick={() => setLyricColor(col)}
+                                    className={`w-5 h-5 rounded-full border transition-transform ${
+                                      lyricColor === col ? 'scale-125 border-white' : 'border-transparent'
+                                    }`}
+                                    style={{ backgroundColor: col }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Text Area */}
+                            <div className="space-y-1.5">
+                              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Timed Lyrics Board</span>
+                              <textarea
+                                value={lyricsText}
+                                onChange={(e) => setLyricsText(e.target.value)}
+                                rows={3}
+                                className="w-full bg-black border border-zinc-900 rounded-xl p-3 text-[10px] font-mono text-zinc-300 focus:outline-none focus:border-orange-500 custom-scrollbar resize-none font-semibold leading-relaxed"
+                                placeholder={`[00:03] Example lyric lines...`}
+                              />
+                              <p className="text-[7px] text-zinc-600 font-bold uppercase tracking-widest leading-normal">
+                                Use format [mm:ss] text to time-sync, or write flat text for auto-scroll loops.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {activeParamTab === 'trimmer' && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-zinc-900/40 border border-zinc-900 rounded-2xl">
+                          <div>
+                            <p className="text-[10px] font-black text-white uppercase tracking-tight">Audio Trimming Enabled</p>
+                            <p className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">Crop and loop specialized custom clips</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              stopPlaybackSources();
+                              setIsPlayingPreview(false);
+                              setClipEnabled(!clipEnabled);
+                            }}
+                            className={`w-12 h-6 rounded-full transition-all relative ${clipEnabled ? 'bg-orange-500' : 'bg-zinc-800'}`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${clipEnabled ? 'right-1' : 'left-1'}`} />
+                          </button>
+                        </div>
+
+                        {clipEnabled && (
+                          <div className="space-y-4 p-4 bg-zinc-950/80 border border-zinc-900 rounded-2xl">
+                            {/* Trim bounds slider control */}
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[9px] font-black uppercase tracking-wider text-zinc-400">
+                                <span>Clip Boundary Range</span>
+                                <span className="text-orange-500 font-mono">
+                                  {clipStart}s - {clipEnd}s ({clipEnd - clipStart}s Clip)
+                                </span>
+                              </div>
+                              
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[8px] text-zinc-500 uppercase font-black block mb-1">Start Timeline Offset</label>
+                                  <input
+                                    type="range"
+                                    min={0}
+                                    max={Math.max(0, clipEnd - 2)}
+                                    value={clipStart}
+                                    onChange={(e) => {
+                                      stopPlaybackSources();
+                                      setIsPlayingPreview(false);
+                                      setClipStart(Number(e.target.value));
+                                    }}
+                                    className="w-full accent-orange-500 bg-zinc-900 h-1 rounded-lg outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="text-[8px] text-zinc-500 uppercase font-black block mb-1">End Timeline Limit</label>
+                                  <input
+                                    type="range"
+                                    min={clipStart + 2}
+                                    max={Math.round(activeTrack?.duration || 15)}
+                                    value={clipEnd}
+                                    onChange={(e) => {
+                                      stopPlaybackSources();
+                                      setIsPlayingPreview(false);
+                                      setClipEnd(Number(e.target.value));
+                                    }}
+                                    className="w-full accent-orange-500 bg-zinc-900 h-1 rounded-lg outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* 3. Synthesis CTA Button */}

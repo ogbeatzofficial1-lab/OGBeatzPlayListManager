@@ -7,7 +7,8 @@ import {
   Settings, 
   Activity,
   Share2,
-  Video
+  Video,
+  Shield
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -33,31 +34,54 @@ export default function Shell({ children, activeView, onViewChange }: ShellProps
   return (
     <div className="flex h-screen bg-black text-white">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-zinc-900 flex flex-col p-6 space-y-8">
-        <div className="flex items-center gap-3 px-2">
-          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-            <Music className="text-black w-5 h-5" />
+      <aside className="w-64 border-r border-zinc-900 flex flex-col p-6 space-y-8 h-full justify-between shrink-0">
+        <div className="space-y-8 flex-1 flex flex-col min-h-0">
+          <div className="flex items-center gap-3 px-2 shrink-0">
+            <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
+              <Music className="text-black w-5 h-5" />
+            </div>
+            <span className="font-make tracking-tighter text-xl uppercase italic font-black">OG BEATZ</span>
           </div>
-          <span className="font-black tracking-tighter text-xl uppercase italic">OG BEATZ</span>
+
+          <nav className="flex-1 space-y-2 overflow-y-auto pr-1">
+            {menuItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => onViewChange(item.id)}
+                className={cn(
+                  "w-full flex items-center gap-4 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                  activeView === item.id 
+                    ? "bg-zinc-900 text-orange-500 border border-zinc-800" 
+                    : "text-zinc-500 hover:text-white hover:bg-zinc-900/50"
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                {item.label}
+              </button>
+            ))}
+          </nav>
         </div>
 
-        <nav className="flex-1 space-y-2">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onViewChange(item.id)}
-              className={cn(
-                "w-full flex items-center gap-4 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-                activeView === item.id 
-                  ? "bg-zinc-900 text-orange-500 border border-zinc-800" 
-                  : "text-zinc-500 hover:text-white hover:bg-zinc-900/50"
-              )}
-            >
-              <item.icon className="w-5 h-5" />
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        {/* User Identity Profile Footer */}
+        <div className="border-t border-zinc-900 pt-6 mt-auto shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/25 flex items-center justify-center text-orange-550 shrink-0 relative">
+              <Shield className="w-5 h-5 text-orange-500" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-black" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 leading-none">
+                <span className="text-[10px] font-black uppercase tracking-wide truncate text-white">OB OGBeatz Admin</span>
+              </div>
+              <p className="text-[8px] font-mono tracking-widest text-[#10b981] uppercase mt-0.5 font-bold flex items-center gap-1">
+                <span>ACTIVE NOW</span>
+              </p>
+              <div className="inline-block px-1.5 py-0.5 bg-orange-500/10 border border-orange-500/20 rounded-md mt-1">
+                <span className="text-[7px] font-mono font-black text-orange-400 tracking-widest uppercase">PRO PRODUCER</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </aside>
 
       {/* Main Content */}
