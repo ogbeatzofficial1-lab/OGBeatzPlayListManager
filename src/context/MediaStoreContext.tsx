@@ -15,7 +15,7 @@ interface MediaStoreContextType {
   addTrack: (track: Partial<Track>) => Promise<Track>;
   updateTrack: (id: string, updates: Partial<Track>) => Promise<void>;
   deleteTrack: (id: string) => Promise<void>;
-  addPlaylist: (playlist: Partial<Playlist>) => Promise<void>;
+  addPlaylist: (playlist: Partial<Playlist>) => Promise<Playlist>;
   updatePlaylist: (id: string, updates: Partial<Playlist>) => Promise<void>;
   deletePlaylist: (id: string) => Promise<void>;
   addTrackToPlaylist: (trackId: string, playlistId: string) => Promise<void>;
@@ -26,6 +26,7 @@ interface MediaStoreContextType {
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
   shareLinks: ShareLink[];
   addShareLink: (link: Partial<ShareLink>) => Promise<ShareLink>;
+  deleteShareLink: (id: string) => Promise<void>;
   getShareContent: (token: string) => Promise<{ track?: Track, playlist?: Playlist, link: ShareLink } | null>;
   addActivity: (activity: Partial<Activity>) => Promise<void>;
   analyzeTrack: (name: string) => Promise<{ bpm: number, key: string, duration?: number }>;
@@ -1008,6 +1009,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
         addToast(`Playlist "${newPl.name}" saved to database!`, 'success');
       }
     }
+    return newPl;
   };
 
   const addClient = async (client: Partial<Client>) => {
@@ -1120,33 +1122,31 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
   };
 
   const sendMessage = async (clientId: string, content: string, image_url?: string | null, direction: 'inbound' | 'outbound' = 'outbound') => {
+    const client = clients.find(c => c.id === clientId);
+    let recipient_id = '';
+    let clientName = 'Client';
+
+    if (client) {
+      if (direction === 'outbound') {
+        recipient_id = client.email;
+      } else {
+        recipient_id = 'producer@ogbeatz.com';
+      }
+      clientName = client.name;
+    } else {
+      recipient_id = direction === 'outbound' ? 'unknown@client.com' : 'producer@ogbeatz.com';
+    }
+
     const newMessage: Message = {
       id: uuidv4(),
       client_id: clientId,
-      recipient_id: '',
+      recipient_id,
       content,
       image_url: image_url || null,
       direction: direction,
       timestamp: new Date().toISOString(),
       is_read: false
     };
-
-    let clientName = 'Client';
-
-    setClients(prevClients => {
-      const client = prevClients.find(c => c.id === clientId);
-      if (client) {
-        if (direction === 'outbound') {
-          newMessage.recipient_id = client.email;
-        } else {
-          newMessage.recipient_id = 'producer@ogbeatz.com';
-        }
-        clientName = client.name;
-      }
-      return prevClients;
-    });
-    
-    if (!newMessage.recipient_id) return;
 
     setMessages(prev => [...prev, newMessage]);
 
@@ -1211,6 +1211,19 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       }
     }
     return newLink;
+  };
+
+  const deleteShareLink = async (id: string) => {
+    setShareLinks(prev => prev.filter(l => l.id !== id));
+    if (supabase) {
+      const { error } = await supabase.from('share_links').delete().eq('id', id);
+      if (error) {
+        console.error(error);
+        addToast(`Failed to delete share link: ${error.message}`, 'error');
+      } else {
+        addToast("Share link deleted from database!", 'success');
+      }
+    }
   };
 
   const getShareContent = async (token: string) => {
@@ -1589,7 +1602,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     <MediaStoreContext.Provider value={{
       tracks, playlists, clients, activities, profile, loading, loadingProgress, loadingStatusText, shareLinks, messages, promoVideos,
       addTrack, updateTrack, deleteTrack, addPlaylist, updatePlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist,
-      addClient, updateClient, deleteClient, updateProfile, addShareLink, getShareContent, addActivity, analyzeTrack, sendMessage, addPromoVideo, deletePromoVideo, incrementShareLinkAccess,
+      addClient, updateClient, deleteClient, updateProfile, addShareLink, deleteShareLink, getShareContent, addActivity, analyzeTrack, sendMessage, addPromoVideo, deletePromoVideo, incrementShareLinkAccess,
       uploadFile,
       toasts, addToast, removeToast, connected
     }}>

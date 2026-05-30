@@ -586,9 +586,14 @@ export default function ClientPortal({ client }: { client: Client }) {
                     : "bg-slate-900/20 border-slate-900 hover:border-slate-800 hover:bg-slate-900/40"
                   )}
                   onClick={() => {
-                    setActiveTrack(t);
-                    setFeedbackNote('');
-                    setCapturedTimestamp(null);
+                    if (isSelected) {
+                      togglePlay();
+                    } else {
+                      setActiveTrack(t);
+                      setIsPlaying(true);
+                      setFeedbackNote('');
+                      setCapturedTimestamp(null);
+                    }
                   }}
                 >
                   <div className="flex justify-between items-start gap-3">
@@ -695,10 +700,13 @@ export default function ClientPortal({ client }: { client: Client }) {
                   )}
 
                   {/* High Fidelity Centralized Play state Trigger */}
-                  <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center rounded-full">
+                  <div className={cn(
+                    "absolute inset-0 bg-slate-950/40 transition-opacity duration-300 flex items-center justify-center rounded-full",
+                    isPlaying ? "opacity-0 group-hover:opacity-100" : "opacity-100"
+                  )}>
                     <button 
                       onClick={togglePlay}
-                      className="w-16 h-16 bg-amber-500 text-slate-950 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all text-black border-2 border-amber-300"
+                      className="w-16 h-16 bg-amber-500 text-slate-950 rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all text-black border-2 border-amber-300 cursor-pointer"
                     >
                       {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
                     </button>

@@ -253,8 +253,8 @@ export default function App() {
     tracks, playlists, clients, activities, messages, profile, loading, loadingProgress, loadingStatusText, shareLinks, promoVideos,
     deleteTrack, updateTrack, addPlaylist, updatePlaylist, deletePlaylist, 
     addTrackToPlaylist, removeTrackFromPlaylist, addClient, updateClient, deleteClient, 
-    updateProfile, addShareLink, addActivity, sendMessage, incrementShareLinkAccess, getShareContent,
-    uploadFile, toasts, removeToast
+    updateProfile, addShareLink, deleteShareLink, addActivity, sendMessage, incrementShareLinkAccess, getShareContent,
+    uploadFile, toasts, addToast, removeToast
   } = useMediaStore();
   const hasIncrementedRef = React.useRef<string | null>(null);
 
@@ -2420,6 +2420,342 @@ export default function App() {
 
         </div>
 
+        {/* CLIENT PLAYLISTS TRACKING & MANAGEMENT SECTION */}
+        <div className="bg-zinc-950 border border-zinc-905 bg-gradient-to-b from-zinc-950 to-zinc-900 border-zinc-900 rounded-[3rem] p-8 lg:p-10 space-y-8 hover:border-zinc-800 transition-all">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-zinc-900">
+            <div className="space-y-1">
+              <h2 className="text-xl font-black text-white uppercase italic tracking-tighter flex items-center gap-2.5">
+                <Music className="w-5 h-5 text-orange-500 animate-pulse" />
+                <span>LINKED CLIENT PLAYLISTS & VAULT ACCESS</span>
+              </h2>
+              <p className="text-xs text-zinc-500 max-w-2xl leading-relaxed">
+                Review and update exact playlist reference sets shared with {selectedClient.name}. Add or remove master tracks dynamically to keep their selection state fully current.
+              </p>
+            </div>
+            
+            {/* Quick Assign / Create Control Group */}
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Dropdown to assign an existing playlist */}
+              {playlists.filter(p => !shareLinks.some(l => l.client_id === selectedClient.id && l.playlist_id === p.id)).length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <select 
+                    id="playlist-assign-select"
+                    className="bg-black border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-400 rounded-xl px-4 py-2.5 outline-none focus:border-orange-500 hover:text-white transition-all transition-colors"
+                    onChange={(e) => {
+                      const playlistId = e.target.value;
+                      if (!playlistId) return;
+                      addShareLink({
+                        playlist_id: playlistId,
+                        client_id: selectedClient.id,
+                        recipient_email: selectedClient.email,
+                        download_enabled: true
+                      });
+                      // Log assignment to Audit Trail
+                      const plName = playlists.find(p => p.id === playlistId)?.name || 'Collection';
+                      addActivity({
+                        type: 'share',
+                        user: 'OGBeatz',
+                        action: 'assigned collection',
+                        target: plName,
+                        details: `Linked playlist '${plName}' to ${selectedClient.name}`,
+                        client_id: selectedClient.id,
+                        playlist_id: playlistId
+                      });
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="">-- ASSIGN EXISTING PLAYLIST --</option>
+                    {playlists
+                      .filter(p => !shareLinks.some(l => l.client_id === selectedClient.id && l.playlist_id === p.id))
+                      .map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({(p.track_ids || []).length} tracks)</option>
+                      ))
+                    }
+                  </select>
+                </div>
+              ) : (
+                <span className="text-[10px] font-mono font-bold text-zinc-650 uppercase tracking-widest bg-zinc-900/50 px-3.5 py-2.5 rounded-xl border border-zinc-900">
+                  All Playlists Assigned
+                </span>
+              )}
+
+              <button 
+                onClick={async () => {
+                  const name = prompt("Enter a Name for the New Playlist:");
+                  if (!name) return;
+                  const desc = prompt("Enter a brief Description:") || "Custom curated client reference set";
+                  
+                  // Generate custom random color hues
+                  const hues = [
+                    ['#f97316', '#ea580c'], // orange
+                    ['#3b82f6', '#1d4ed8'], // blue
+                    ['#10b981', '#047857'], // green
+                    ['#8b5cf6', '#6d28d9'], // purple
+                    ['#ec4899', '#be185d'], // pink
+                  ];
+                  const randomHue = hues[Math.floor(Math.random() * hues.length)];
+
+                  try {
+                    // Add playlist
+                    const createdPl = await addPlaylist({
+                      name,
+                      description: desc,
+                      track_ids: [],
+                      start_color: randomHue[0],
+                      end_color: randomHue[1]
+                    });
+
+                    // Instantly assign to client
+                    await addShareLink({
+                      playlist_id: createdPl.id,
+                      client_id: selectedClient.id,
+                      recipient_email: selectedClient.email,
+                      download_enabled: true
+                    });
+
+                    // Log
+                    await addActivity({
+                      type: 'share',
+                      user: 'OGBeatz',
+                      action: 'created & assigned',
+                      target: name,
+                      details: `Created new playlist '${name}' and shared with ${selectedClient.name}`,
+                      client_id: selectedClient.id,
+                      playlist_id: createdPl.id
+                    });
+                  } catch (err) {
+                    console.error("Created but failed to assign:", err);
+                  }
+                }}
+                className="px-5 py-2.5 bg-orange-500 hover:bg-orange-400 text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-orange-500/15"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>CREATE & ASSIGN PLAYLIST</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Mapped Playlists Content */}
+          <div className="space-y-6">
+            {shareLinks.filter(l => l.client_id === selectedClient.id && l.playlist_id).length > 0 ? (
+              shareLinks.filter(l => l.client_id === selectedClient.id && l.playlist_id).map(link => {
+                const playlist = playlists.find(p => p.id === link.playlist_id);
+                if (!playlist) return null;
+
+                const playlistTracks = tracks.filter(t => playlist.track_ids?.includes(t.id));
+
+                return (
+                  <div key={link.id} className="border border-zinc-900 bg-zinc-950/40 rounded-[2rem] overflow-hidden p-6 lg:p-8 space-y-6 hover:border-zinc-800 transition-all">
+                    {/* Playlist header info */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div 
+                          className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-black text-xl italic select-none shrink-0 border border-zinc-800/80 shadow-inner"
+                          style={{ background: `linear-gradient(135deg, ${playlist.start_color || '#f97316'}, ${playlist.end_color || '#ea580c'})` }}
+                        >
+                          {playlist.name[0]?.toUpperCase() || 'P'}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-xl font-black uppercase italic tracking-tight">{playlist.name}</h3>
+                            <span className="px-2.5 py-0.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-[8px] font-mono text-orange-400 font-bold uppercase tracking-widest">
+                              ACTIVE PORTAL
+                            </span>
+                          </div>
+                          <p className="text-xs text-zinc-500">{playlist.description || 'Client audio portal set.'}</p>
+                        </div>
+                      </div>
+
+                      {/* Playlist actions (add track/revoke) */}
+                      <div className="flex flex-wrap items-center gap-3">
+                        {/* Selector to add track to THIS playlist */}
+                        {tracks.filter(t => !playlist.track_ids?.includes(t.id)).length > 0 ? (
+                          <select
+                            id={`add-track-select-${playlist.id}`}
+                            className="bg-black border border-zinc-850 hover:border-zinc-800 text-[10px] text-zinc-400 hover:text-white font-black tracking-widest uppercase rounded-xl px-3.5 py-2 outline-none focus:border-orange-500/60 max-w-[200px] transition-colors"
+                            onChange={(e) => {
+                              const trackId = e.target.value;
+                              if (!trackId) return;
+                              addTrackToPlaylist(trackId, playlist.id);
+                              // Log add
+                              const tName = tracks.find(t => t.id === trackId)?.name || 'Track';
+                              addActivity({
+                                type: 'system',
+                                user: 'OGBeatz',
+                                action: 'added track to set',
+                                target: tName,
+                                details: `Added track '${tName}' to ${playlist.name}`,
+                                client_id: selectedClient.id,
+                                playlist_id: playlist.id,
+                                track_id: trackId
+                              });
+                              e.target.value = "";
+                            }}
+                          >
+                            <option value="">+ ADD MASTER TRACK</option>
+                            {tracks
+                              .filter(t => !playlist.track_ids?.includes(t.id))
+                              .map(t => (
+                                <option key={t.id} value={t.id}>{t.name} ({t.bpm ? `${t.bpm} BPM` : 'No BPM'})</option>
+                              ))
+                            }
+                          </select>
+                        ) : (
+                          <span className="text-[9px] font-mono font-bold text-zinc-650 bg-zinc-900/30 px-3 py-1.5 rounded-lg border border-zinc-900">
+                            No tracks remaining
+                          </span>
+                        )}
+
+                        <button 
+                          onClick={() => {
+                            if (confirm(`Do you want to revoke vault access for the playlist "${playlist.name}" for ${selectedClient.name}? The link will be disabled.`)) {
+                              deleteShareLink(link.id);
+                              addActivity({
+                                type: 'share',
+                                user: 'OGBeatz',
+                                action: 'revoked collection',
+                                target: playlist.name,
+                                details: `Revoked share access of '${playlist.name}' from ${selectedClient.name}`,
+                                client_id: selectedClient.id,
+                                playlist_id: playlist.id
+                              });
+                            }
+                          }}
+                          className="px-4 py-2 border border-rose-955 border-rose-950/60 hover:border-rose-500 hover:bg-rose-500/10 text-rose-500 hover:text-rose-450 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>REVOKE VAULT ACCESS</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Share Link Resend & Copy Area */}
+                    <div className="bg-black border border-zinc-900 rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                      <div className="flex flex-col gap-1 min-w-0 flex-1">
+                        <span className="text-[9px] font-mono font-black text-zinc-500 uppercase tracking-widest">Client Portal Share Link / Resend URL</span>
+                        <div className="flex items-center gap-2 bg-zinc-900/50 border border-zinc-900/80 rounded-xl px-3.5 py-2 select-all cursor-text overflow-hidden group/link">
+                          <span className="text-[11px] font-mono text-zinc-400 truncate select-all">{`${window.location.origin}/?share=${link.token}`}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            const url = `${window.location.origin}/?share=${link.token}`;
+                            navigator.clipboard.writeText(url);
+                            addToast(`Secure share link for "${playlist.name}" copied!`, 'success');
+                          }}
+                          className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-850 hover:text-white border border-zinc-800 hover:border-zinc-700 text-zinc-300 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                          </svg>
+                          <span>COPY LINK</span>
+                        </button>
+                        <a
+                          href={`${window.location.origin}/?share=${link.token}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2.5 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 hover:border-orange-500/40 text-orange-400 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-center flex items-center justify-center gap-1.5"
+                        >
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          <span>OPEN PORTAL</span>
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Mapped Playlist Tracks Table/Grid */}
+                    <div className="bg-black/60 border border-zinc-900 rounded-[2rem] overflow-hidden">
+                      {playlistTracks.length > 0 ? (
+                        <div className="divide-y divide-zinc-900/40">
+                          {playlistTracks.map((pt, index) => {
+                            const isCurrentPlaying = globalActiveTrack?.id === pt.id;
+                            
+                            return (
+                              <div key={pt.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 px-6 hover:bg-zinc-900/10 gap-4 transition-all group/item">
+                                <div className="flex items-center gap-4">
+                                  <span className="text-zinc-700 font-mono text-[10px] w-4">{String(index + 1).padStart(2, '0')}</span>
+                                  
+                                  {/* Play/Pause indicator circle */}
+                                  <button 
+                                    onClick={() => isCurrentPlaying ? (isPlaying ? pause() : resume()) : playTrack(pt, playlistTracks)}
+                                    className={cn(
+                                      "w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer border",
+                                      isCurrentPlaying ? "bg-orange-500 text-black border-orange-400" : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700"
+                                    )}
+                                  >
+                                    {isCurrentPlaying && isPlaying ? (
+                                      <Pause className="w-3.5 h-3.5 fill-current" />
+                                    ) : (
+                                      <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                                    )}
+                                  </button>
+
+                                  <div className="space-y-0.5">
+                                    <span className="text-sm font-bold text-white uppercase tracking-tight group-hover/item:text-orange-500 transition-colors">{pt.name}</span>
+                                    <div className="flex items-center gap-3 text-[10px] text-zinc-500 font-mono">
+                                      <span>{pt.artist}</span>
+                                      <span>•</span>
+                                      <span>{pt.bpm} BPM</span>
+                                      <span>•</span>
+                                      <span className="text-orange-500/70 font-bold">{pt.key_signature}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-4 justify-between sm:justify-end">
+                                  {/* Duration display */}
+                                  <span className="text-[10px] font-mono text-zinc-650 font-bold uppercase tracking-widest">{formatTime(pt.duration)}</span>
+                                  
+                                  {/* Remove button */}
+                                  <button 
+                                    onClick={() => {
+                                      if (confirm(`Remove "${pt.name}" from "${playlist.name}"?`)) {
+                                        removeTrackFromPlaylist(pt.id, playlist.id);
+                                        addActivity({
+                                          type: 'system',
+                                          user: 'OGBeatz',
+                                          action: 'removed track from set',
+                                          target: pt.name,
+                                          details: `Removed track '${pt.name}' from ${playlist.name}`,
+                                          client_id: selectedClient.id,
+                                          playlist_id: playlist.id,
+                                          track_id: pt.id
+                                        });
+                                      }
+                                    }}
+                                    title="Remove Track"
+                                    className="p-2 bg-zinc-950 border border-zinc-900 text-rose-500 hover:text-rose-400 hover:border-zinc-800 rounded-xl transition-all cursor-pointer"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-8 text-center bg-zinc-950/20">
+                          <p className="text-[10px] font-mono font-bold text-zinc-600 uppercase tracking-widest mb-1">No audio assets configured</p>
+                          <p className="text-xs text-zinc-505 max-w-sm mx-auto leading-relaxed text-zinc-500">This linked collection is currently empty. Select a master track above to deploy contents to this portal.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="py-12 border border-dashed border-zinc-900 bg-zinc-950/20 rounded-[2rem] flex flex-col items-center justify-center text-center">
+                <Music className="w-10 h-10 mb-3 opacity-20 text-orange-500" />
+                <h4 className="text-sm font-bold uppercase tracking-wider text-zinc-400">Vault Access Terminals Offline</h4>
+                <p className="text-zinc-600 text-xs mt-1.5 max-w-sm mx-auto leading-relaxed">
+                  No playlists are currently active or shared with this institutional partner. Select an existing playlist or create a fresh custom set above to initialize delivery.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* TWO COLUMN LOWER LAYOUT: ACTIVITY LOG vs ACTIVE PLAYER */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
@@ -2651,10 +2987,14 @@ export default function App() {
                     if (isMock) {
                       if (isPlaying) {
                         alert("Pausing simulated master audit node.");
-                        // Standard state is managed through useAudio hook, playTrack can load
                       } else {
-                        // Standard setup
                         if (tracks.length > 0) playTrack(tracks[0]);
+                      }
+                    } else if (!globalActiveTrack) {
+                      if (playerTrack && playerTrack.id !== 'clear-master-mock') {
+                        playTrack(playerTrack);
+                      } else if (tracks.length > 0) {
+                        playTrack(tracks[0]);
                       }
                     } else {
                       isPlaying ? pause() : resume();
