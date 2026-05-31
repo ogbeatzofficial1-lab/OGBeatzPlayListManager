@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MoreVertical, Edit3, Share2, Download, Trash2, Video, Plus, Check, Sparkles } from 'lucide-react';
+import { MoreVertical, Edit3, Share2, Download, Trash2, Video, Plus, Check, Sparkles, Info } from 'lucide-react';
 import { Track, Playlist } from '../types';
 import { cn } from '../lib/utils';
 
@@ -14,11 +14,12 @@ interface TrackOptionsMenuProps {
   onAddToPlaylist: (id: string) => void;
   playlists: Playlist[];
   onAnalyze?: () => void;
+  onViewDetails?: () => void;
   className?: string;
 }
 
 export default function TrackOptionsMenu({ 
-  track, onEdit, onShare, onDownload, onDelete, onCreatePromo, onCreateVideo, onAddToPlaylist, playlists, onAnalyze, className 
+  track, onEdit, onShare, onDownload, onDelete, onCreatePromo, onCreateVideo, onAddToPlaylist, playlists, onAnalyze, onViewDetails, className 
 }: TrackOptionsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -35,6 +36,11 @@ export default function TrackOptionsMenu({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
           <div className="absolute right-0 top-12 w-56 bg-zinc-950 border border-zinc-900 rounded-2xl p-2 shadow-2xl z-50 space-y-1">
+            {onViewDetails && (
+              <button onClick={() => { onViewDetails(); setIsOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-200 hover:bg-zinc-900 rounded-xl transition-colors">
+                <Info className="w-3.5 h-3.5 text-orange-500" /> Track Details
+              </button>
+            )}
             <button onClick={() => { onEdit(); setIsOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-zinc-900 rounded-xl transition-colors">
               <Edit3 className="w-3.5 h-3.5" /> Edit metadata
             </button>
