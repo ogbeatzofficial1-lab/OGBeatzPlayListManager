@@ -9,6 +9,7 @@ interface VideoGenerationModalProps {
   track?: Track;
   playlist?: Playlist;
   onClose: () => void;
+  key?: string | number;
 }
 
 export default function VideoGenerationModal({ track, playlist, onClose }: VideoGenerationModalProps) {

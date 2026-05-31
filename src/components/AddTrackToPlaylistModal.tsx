@@ -3,7 +3,7 @@ import { X, Plus, Check } from 'lucide-react';
 import { useMediaStore } from '../context/MediaStoreContext';
 import { Playlist } from '../types';
 
-export default function AddTrackToPlaylistModal({ playlist, onClose }: { playlist: Playlist, onClose: () => void }) {
+export default function AddTrackToPlaylistModal({ playlist, onClose }: { playlist: Playlist; onClose: () => void; key?: string | number }) {
   const { tracks, addTrackToPlaylist } = useMediaStore();
 
   return (

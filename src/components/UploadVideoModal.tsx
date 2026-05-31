@@ -3,7 +3,7 @@ import { X, Video, Upload, Trash2, Image as ImageIcon, Sparkles, Film, Music, La
 import { motion, AnimatePresence } from 'motion/react';
 import { useMediaStore } from '../context/MediaStoreContext';
 
-export default function UploadVideoModal({ onClose }: { onClose: () => void }) {
+export default function UploadVideoModal({ onClose }: { onClose: () => void; key?: string | number }) {
   const { tracks, playlists, uploadFile, addPromoVideo, addActivity } = useMediaStore();
 
   const [uploadMode, setUploadMode] = useState<'single' | 'combine'>('single');

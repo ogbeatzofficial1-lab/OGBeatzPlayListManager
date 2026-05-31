@@ -33,6 +33,7 @@ export default function EditPlaylistModal({ playlist, onClose, onSave, onDelete,
   onSave: (data: any) => Promise<void>;
   onDelete?: (id: string) => void;
   isNew?: boolean;
+  key?: string | number;
 }) {
   const { tracks, uploadFile, updateTrack, deleteTrack } = useMediaStore();
   const fileInputRef = useRef<HTMLInputElement>(null);

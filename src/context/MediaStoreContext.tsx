@@ -29,7 +29,7 @@ interface MediaStoreContextType {
   deleteShareLink: (id: string) => Promise<void>;
   getShareContent: (token: string) => Promise<{ track?: Track, playlist?: Playlist, link: ShareLink } | null>;
   addActivity: (activity: Partial<Activity>) => Promise<void>;
-  analyzeTrack: (name: string) => Promise<{ bpm: number, key: string, duration?: number }>;
+  analyzeTrack: (name: string, duration?: number) => Promise<{ bpm: number, key: string, duration?: number, tags?: string[] }>;
   messages: Message[];
   sendMessage: (clientId: string, content: string, image_url?: string | null, direction?: 'inbound' | 'outbound') => Promise<void>;
   promoVideos: PromoVideo[];
@@ -432,6 +432,34 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
           setConnected(true);
           setLoadingProgress(20);
           setLoadingStatusText("Secure handshake established. Syncing databases...");
+          
+          // Asynchronously attempt to auto-patch schema to add 'lyrics' column on tracks table
+          try {
+            (async () => {
+              const query = "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS lyrics TEXT;";
+              const rpcCandidates = [
+                { name: "exec_sql", arg: "sql_query" },
+                { name: "exec_sql", arg: "query" },
+                { name: "run_sql", arg: "sql" },
+                { name: "execute_sql", arg: "query" },
+                { name: "execute_sql", arg: "sql" }
+              ];
+              for (const cand of rpcCandidates) {
+                try {
+                  const { error } = await activeSupabase.rpc(cand.name, { [cand.arg]: query });
+                  if (!error) {
+                    console.log(`[Supabase Auto-Patch] Column 'lyrics' successfully created/verified via RPC "${cand.name}"!`);
+                    break;
+                  }
+                } catch (e) {
+                  // silent catch
+                }
+              }
+            })();
+          } catch (e) {
+            console.warn("[Supabase Auto-Patch] Failed schema patch trigger:", e);
+          }
+
           try {
             // Robust retry helper with exponential backoff to handle cold wake-ups and statement timeouts gracefully
             const fetchWithRetry = async (table: string, retries = 2, delayMs = 1000): Promise<any[] | null> => {
@@ -806,11 +834,26 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       const dbTrack = { ...newTrack } as any;
       delete dbTrack.file_data;
       delete dbTrack.image_data;
-      const { error } = await supabase.from('tracks').insert(dbTrack);
+      
+      let { error } = await supabase.from('tracks').insert(dbTrack);
+      
+      // Resilient Fallback: If 'lyrics' column doesn't exist in Supabase database schema cache
+      if (error && (error.message?.includes('lyrics') || error.code === '42703' || error.message?.includes('schema cache'))) {
+        console.warn("[MediaStore] 'lyrics' column missing or cache stale in remote Supabase tracks table. Retrying insert without lyrics column...");
+        const dbTrackFallback = { ...dbTrack };
+        delete dbTrackFallback.lyrics;
+        
+        const retryResult = await supabase.from('tracks').insert(dbTrackFallback);
+        error = retryResult.error;
+        if (!error) {
+          addToast(`Track saved to DB (lyrics cached locally due to pending database migration)`, 'info');
+        }
+      }
+
       if (error) {
         console.error("Error inserting track into Supabase:", error);
         addToast(`Failed to save track to database: ${error.message}`, 'error');
-      } else {
+      } else if (!error && !toasts.some(t => t.message.includes("lyrics cached locally"))) {
         addToast(`Successfully saved track "${newTrack.name}" to database!`, 'success');
       }
     } else {
@@ -850,11 +893,26 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       const dbUpdates = { ...cleanUpdates } as any;
       delete dbUpdates.file_data;
       delete dbUpdates.image_data;
-      const { error } = await supabase.from('tracks').update(dbUpdates).eq('id', id);
+      
+      let { error } = await supabase.from('tracks').update(dbUpdates).eq('id', id);
+      
+      // Resilient Fallback: If 'lyrics' column doesn't exist in Supabase database schema cache
+      if (error && (error.message?.includes('lyrics') || error.code === '42703' || error.message?.includes('schema cache'))) {
+        console.warn("[MediaStore] 'lyrics' column missing or cache stale in remote Supabase tracks table. Retrying update without lyrics column...");
+        const dbUpdatesFallback = { ...dbUpdates };
+        delete dbUpdatesFallback.lyrics;
+        
+        const retryResult = await supabase.from('tracks').update(dbUpdatesFallback).eq('id', id);
+        error = retryResult.error;
+        if (!error) {
+          addToast("Updates saved to DB (lyrics cached locally due to pending database migration)", "info");
+        }
+      }
+
       if (error) {
         console.error("Error updating track in Supabase:", error);
         addToast(`Failed to update track in database: ${error.message}`, 'error');
-      } else {
+      } else if (!error && !toasts.some(t => t.message.includes("lyrics cached locally"))) {
         addToast(`Successfully updated track in database!`, 'success');
       }
     }
@@ -1452,15 +1510,15 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const analyzeTrack = async (name: string): Promise<{ bpm: number, key: string, duration?: number, tags?: string[] }> => {
+  const analyzeTrack = async (name: string, clientDuration?: number): Promise<{ bpm: number, key: string, duration?: number, tags?: string[] }> => {
     const cleanName = name.replace(/\.[^/.]+$/, ""); // Remove extension
-    const duration = 120 + (cleanName.length * 3) % 111;
+    const duration = clientDuration || (120 + (cleanName.length * 3) % 111);
 
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: name })
+        body: JSON.stringify({ filename: name, duration })
       });
       if (response.ok) {
         const data = await response.json();
@@ -1474,13 +1532,22 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
           const seoTags = rawKeywords.map(k => k.length > 20 ? k.substring(0, 18) + '...' : k);
           const combinedTags = [
             typeTag,
+            `camelot_key:${data.camelot_key || ""}`,
+            `genre_category:${data.genre_category || ""}`,
+            `mood:${data.mood || ""}`,
+            `vibe:${data.vibe || ""}`,
+            `instruments:${(data.primary_instruments || []).join(', ')}`,
+            `pitch:${data.pitch || ""}`,
             ...data.tags,
             ...seoTags
-          ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+          ].filter((v, i, a) => a.indexOf(v) === i && v !== "camelot_key:" && v !== "genre_category:" && v !== "mood:" && v !== "vibe:" && v !== "instruments:" && v !== "pitch:"); // deduplicate & filter empty
           
+          // Return the key with Camelot key integrated if present
+          const fullKey = data.camelot_key ? `${data.key} (${data.camelot_key})` : data.key;
+
           return {
             bpm: data.bpm,
-            key: data.key,
+            key: fullKey,
             duration,
             tags: combinedTags
           };

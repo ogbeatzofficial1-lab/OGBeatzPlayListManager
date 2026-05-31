@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, UserPlus } from 'lucide-react';
 import { useMediaStore } from '../context/MediaStoreContext';
 
-export default function AddClientModal({ onClose }: { onClose: () => void }) {
+export default function AddClientModal({ onClose }: { onClose: () => void; key?: string | number }) {
   const [formData, setFormData] = useState({ name: '', email: '' });
   const { addClient } = useMediaStore();
 

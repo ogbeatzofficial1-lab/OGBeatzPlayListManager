@@ -8,10 +8,14 @@ export default function UploadZone({ onSuccess }: { onSuccess: () => void }) {
   const [artwork, setArtwork] = useState<File | null>(null);
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [lyrics, setLyrics] = useState<string>('');
+  const [lyricsFilename, setLyricsFilename] = useState<string | null>(null);
   const artworkInputRef = useRef<HTMLInputElement>(null);
+  const lyricsInputRef = useRef<HTMLInputElement>(null);
   const { addTrack, analyzeTrack, uploadFile } = useMediaStore();
 
   const handleFile = async (f: File) => {
+    if (!f) return;
     if (f.type.startsWith('image/')) {
       setArtwork(f);
       setArtworkUrl(URL.createObjectURL(f));
@@ -20,6 +24,19 @@ export default function UploadZone({ onSuccess }: { onSuccess: () => void }) {
     
     if (f.type.startsWith('audio/')) {
       setFile(f);
+      return;
+    }
+
+    if (f.name.endsWith('.txt') || f.name.endsWith('.lrc') || f.type === 'text/plain') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result;
+        if (typeof text === 'string') {
+          setLyrics(text);
+          setLyricsFilename(f.name);
+        }
+      };
+      reader.readAsText(f);
     }
   };
 
@@ -43,7 +60,7 @@ export default function UploadZone({ onSuccess }: { onSuccess: () => void }) {
       });
 
       setUploadStatus("Analyzing BPM and key characteristics...");
-      const analysis = await analyzeTrack(file.name);
+      const analysis = await analyzeTrack(file.name, duration);
 
       setUploadStatus("Uploading high-fidelity audio master...");
       const finalAudioUrl = await uploadFile('tracks', file);
@@ -70,6 +87,7 @@ export default function UploadZone({ onSuccess }: { onSuccess: () => void }) {
         tags: analysis.tags || [],
         image_url: finalArtworkUrl,
         image_data: artwork || undefined,
+        lyrics: lyrics || undefined,
       });
       
       setUploadStatus(null);
@@ -158,6 +176,56 @@ export default function UploadZone({ onSuccess }: { onSuccess: () => void }) {
              </div>
 
              <input type="file" ref={artworkInputRef} accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files![0])} />
+
+             {/* Lyrics Drag-and-Drop or Edit Section */}
+             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 space-y-3 relative group/lyrics">
+               <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-2">
+                   <span className="text-[9px] font-black uppercase text-zinc-500 tracking-widest">📝 Track Lyrics</span>
+                   {lyricsFilename && (
+                     <span className="text-[8px] font-mono bg-zinc-950 text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 uppercase max-w-[150px] truncate" title={lyricsFilename}>
+                       Loaded: {lyricsFilename}
+                     </span>
+                   )}
+                 </div>
+                 <div className="flex items-center gap-2">
+                   <button 
+                     type="button"
+                     onClick={() => lyricsInputRef.current?.click()}
+                     className="text-[8px] font-black uppercase tracking-widest text-orange-400 hover:text-orange-300 transition-colors cursor-pointer"
+                   >
+                     Browse TXT
+                   </button>
+                   {lyrics && (
+                     <button 
+                       type="button"
+                       onClick={() => { setLyrics(''); setLyricsFilename(null); }}
+                       className="text-[8px] font-black uppercase tracking-widest text-rose-500 hover:text-rose-400 transition-colors cursor-pointer"
+                     >
+                       Clear
+                     </button>
+                   )}
+                 </div>
+               </div>
+               
+               <textarea
+                 value={lyrics}
+                 onChange={(e) => setLyrics(e.target.value)}
+                 placeholder="Drop a .txt/.lrc lyric sheet here, or click Browse to load, or type lyrics manually..."
+                 className="w-full h-24 bg-zinc-950 border border-zinc-900 rounded-xl p-3 outline-none focus:border-orange-500 text-[11px] font-mono leading-relaxed resize-none text-zinc-300 placeholder:text-zinc-600"
+               />
+               
+               <input 
+                 type="file" 
+                 ref={lyricsInputRef} 
+                 accept=".txt,.lrc,text/plain" 
+                 className="hidden" 
+                 onChange={(e) => {
+                   const selectedFile = e.target.files?.[0];
+                   if (selectedFile) handleFile(selectedFile);
+                 }} 
+               />
+             </div>
 
              <button 
                 onClick={handleUpload} disabled={!!uploadStatus}

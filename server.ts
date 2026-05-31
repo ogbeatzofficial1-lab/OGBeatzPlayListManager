@@ -17,7 +17,7 @@ async function startServer() {
 
   // API - Analyze Track
   app.post("/api/analyze", async (req, res) => {
-    const { filename } = req.body;
+    const { filename, duration } = req.body;
     if (!filename || typeof filename !== "string") {
       res.status(400).json({ error: "Filename is required" });
       return;
@@ -39,32 +39,66 @@ async function startServer() {
         }
       });
 
-      const prompt = `Analyze the audio track filename "${filename}" as a music expert. Determine its likely BPM, musical key signature (standard format, e.g. "C Major", "F# Minor", "A Min"), and 3 to 4 stylistic genre and mood tags. Check if the name contains bpm clues. Alos determine if the track is likely an instrumental or has vocals, and generate 4 high-value SEO keywords.`;
+      const durationText = duration ? `The measured duration is ${Math.round(duration)} seconds.` : '';
+      const prompt = `Analyze the audio track filename "${filename}" as an elite music producer and A&R expert. ${durationText}
+Deduce its details:
+1. BPM speed (e.g., check for number patterns like "140BPM" or guess standard tempo based on genre hints).
+2. Musical key signature (standard format, e.g., "A minor", "F# major").
+3. Camelot DJ mixing key notation (e.g. "8A" for A minor, "11B" for A major).
+4. Specific genre classification (e.g. "Ambient Synthwave", "Dark Trap", "Hard Chicago Drill", "Soulful Acoustic").
+5. Artistic mood description (e.g. "Melancholic & Reflective", "Euphoric & High Energy", "Gritty & Intense").
+6. Sonic textures/vibes (e.g. "Analog Warmth & Vinyl Crackle", "Sub-Bass Heavy & Aggressive Drums").
+7. Primary instruments detected or inferred (e.g. "Acoustic Felt Piano, Rhodes", "Subdued Acoustic Guitar").
+8. A label-ready, single-sentence marketing pitch describing the track's target audience and emotion.
+9. Whether it's an instrumental track (true of most beat tapes/backing tracks) or containing prominent vocals.
+10. Stylistic tags and high-value search discovery SEO keywords.`;
       
       const aiResponse = await ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
-          systemInstruction: "You are an automated professional music transcription and mastering intelligence agent.",
+          systemInstruction: "You are an automated professional music transcription, metadata tagging and mastering intelligence agent.",
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
             properties: {
               bpm: { type: Type.INTEGER, description: "BPM speed of the track, between 60 and 200" },
               key: { type: Type.STRING, description: "Key signature of the track, e.g. C Major, F# Minor, etc." },
+              camelot_key: { type: Type.STRING, description: "Camelot mix key, e.g. 8A, 11B, etc." },
+              genre_category: { type: Type.STRING, description: "Micro-genre, e.g. Phonk, Ambient Lofi, Dark Trap" },
+              mood: { type: Type.STRING, description: "One dominant emotional mood description" },
+              vibe: { type: Type.STRING, description: "High-fidelity texture or sound vibe, e.g. Warm Analog Saturation" },
+              primary_instruments: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: "List of 2 to 4 key instruments, e.g. '808 Bass', 'Rhodes Piano'"
+              },
+              pitch: { type: Type.STRING, description: "Label-ready 1-sentence marketing/curator pitch" },
               tags: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING },
-                description: "Up to 4 stylistic or genre-related tags, e.g. Trap, Clean, Dark"
+                description: "Up to 4 quick stylistic tags, e.g. Trap, Clean, Dark"
               },
-              instrumental: { type: Type.BOOLEAN, description: "True if the track is likely an instrumental track, false if it contains prominent lead vocals" },
+              instrumental: { type: Type.BOOLEAN, description: "True if the track is likely instrumental, false if vocal-heavy" },
               seo_keywords: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING },
-                description: "3 to 4 SEO-friendly keywords for search discoverability, e.g. 'lofi trap beat', 'chill electronic backing track'"
+                description: "3 to 4 SEO phrases for search discoverability"
               }
             },
-            required: ["bpm", "key", "tags", "instrumental", "seo_keywords"]
+            required: [
+              "bpm", 
+              "key", 
+              "camelot_key", 
+              "genre_category", 
+              "mood", 
+              "vibe", 
+              "primary_instruments", 
+              "pitch", 
+              "tags", 
+              "instrumental", 
+              "seo_keywords"
+            ]
           }
         }
       });
@@ -77,6 +111,12 @@ async function startServer() {
             res.json({
               bpm: data.bpm,
               key: data.key,
+              camelot_key: data.camelot_key || "",
+              genre_category: data.genre_category || "",
+              mood: data.mood || "",
+              vibe: data.vibe || "",
+              primary_instruments: data.primary_instruments || [],
+              pitch: data.pitch || "",
               tags: data.tags,
               instrumental: data.instrumental ?? true,
               seo_keywords: data.seo_keywords ?? []

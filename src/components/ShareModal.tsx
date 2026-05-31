@@ -9,6 +9,7 @@ interface ShareModalProps {
   track?: Track;
   playlist?: Playlist;
   onClose: () => void;
+  key?: string | number;
 }
 
 export default function ShareModal({ track, playlist, onClose }: ShareModalProps) {

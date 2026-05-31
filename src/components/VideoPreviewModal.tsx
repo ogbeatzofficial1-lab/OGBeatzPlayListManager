@@ -8,6 +8,7 @@ import { generatePromoPack } from '../services/geminiService';
 interface VideoPreviewModalProps {
   video: PromoVideo;
   onClose: () => void;
+  key?: string | number;
 }
 
 export default function VideoPreviewModal({ video, onClose }: VideoPreviewModalProps) {

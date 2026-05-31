@@ -79,6 +79,42 @@ import { Track, ShareLink, Client, Playlist } from './types';
 import { cn } from './lib/utils';
 import { getSupabaseClient, supabaseUrl } from './lib/supabase';
 
+// Helper to parse extended AI metadata from encoded tag keys
+export const getTrackInfoFromTags = (tags: string[] | undefined | null) => {
+  const info = {
+    camelotKey: '',
+    genreCategory: '',
+    mood: '',
+    vibe: '',
+    instruments: '',
+    pitch: '',
+    cleanTags: [] as string[]
+  };
+  
+  if (!tags || !Array.isArray(tags)) return info;
+  
+  tags.forEach(tag => {
+    if (!tag) return;
+    if (tag.startsWith('camelot_key:')) {
+      info.camelotKey = tag.replace('camelot_key:', '').trim();
+    } else if (tag.startsWith('genre_category:')) {
+      info.genreCategory = tag.replace('genre_category:', '').trim();
+    } else if (tag.startsWith('mood:')) {
+      info.mood = tag.replace('mood:', '').trim();
+    } else if (tag.startsWith('vibe:')) {
+      info.vibe = tag.replace('vibe:', '').trim();
+    } else if (tag.startsWith('instruments:')) {
+      info.instruments = tag.replace('instruments:', '').trim();
+    } else if (tag.startsWith('pitch:')) {
+      info.pitch = tag.replace('pitch:', '').trim();
+    } else {
+      info.cleanTags.push(tag);
+    }
+  });
+  
+  return info;
+};
+
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('ogbeatz-theme') as 'dark' | 'light') || 'dark';
@@ -254,7 +290,7 @@ export default function App() {
     deleteTrack, updateTrack, addPlaylist, updatePlaylist, deletePlaylist, 
     addTrackToPlaylist, removeTrackFromPlaylist, addClient, updateClient, deleteClient, 
     updateProfile, addShareLink, deleteShareLink, addActivity, sendMessage, incrementShareLinkAccess, getShareContent,
-    uploadFile, toasts, addToast, removeToast
+    uploadFile, analyzeTrack, toasts, addToast, removeToast
   } = useMediaStore();
   const hasIncrementedRef = React.useRef<string | null>(null);
 
@@ -505,6 +541,24 @@ export default function App() {
       console.log(`[App] deleteTrack context call completed for ID: ${id}`);
     } catch (err) {
       console.error(`[App] Error in handleDeleteTrack for ID: ${id}:`, err);
+    }
+  };
+
+  const handleAnalyzeTrackManual = async (track: Track) => {
+    addToast(`Initializing high-precision AI diagnostics for "${track.name}"...`, "info");
+    try {
+      const result = await analyzeTrack(track.name, track.duration);
+      if (result) {
+        await updateTrack(track.id, {
+          bpm: result.bpm,
+          key_signature: result.key,
+          tags: result.tags
+        });
+        addToast(`Successfully updated parameters for "${track.name}"!`, "success");
+      }
+    } catch (err: any) {
+      console.error("Manual AI Analysis error:", err);
+      addToast(`AI Diagnostics failed: ${err.message || err}`, "error");
     }
   };
 
@@ -1133,6 +1187,7 @@ export default function App() {
                       onCreateVideo={() => setSelectedTrackForVideo(track)}
                       onAddToPlaylist={(plId) => addTrackToPlaylist(track.id, plId)}
                       playlists={playlists}
+                      onAnalyze={() => handleAnalyzeTrackManual(track)}
                       className="bg-black/40 backdrop-blur-md rounded-full border border-white/10"
                      />
                    </div>
@@ -1145,15 +1200,63 @@ export default function App() {
                    <p className="text-zinc-500 text-sm">{track.artist}</p>
                 </div>
 
-                {track.tags && track.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {track.tags.slice(0, 3).map(tag => (
-                      <span key={tag} className="px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-[8px] font-black uppercase tracking-widest text-zinc-500">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {(() => {
+                  const info = getTrackInfoFromTags(track.tags);
+                  return (
+                    <>
+                      {info.pitch && (
+                        <p className="text-[11px] text-zinc-400 italic bg-zinc-950/60 border border-zinc-900 rounded-xl p-3 leading-relaxed mt-1 select-all font-mono">
+                          "{info.pitch}"
+                        </p>
+                      )}
+
+                      {(info.genreCategory || info.mood || info.vibe || info.instruments) && (
+                        <div className="space-y-1.5 border-t border-zinc-900/60 pt-3 text-[10px] font-mono leading-relaxed">
+                          <span className="text-[8px] font-black uppercase text-orange-500 tracking-wider flex items-center gap-1.5 mb-1 bg-orange-500/5 px-2 py-0.5 rounded border border-orange-500/10 w-max">
+                            <span className="w-1 h-1 bg-orange-500 rounded-full animate-pulse" />
+                            🎯 AI A&R REPORT
+                          </span>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-zinc-500 font-mono">
+                            {info.genreCategory && (
+                              <div className="flex items-center justify-between border-b border-zinc-900/30 pb-0.5 min-w-0">
+                                <span className="text-zinc-600 font-bold uppercase tracking-wider text-[7px] shrink-0">GENRE:</span>
+                                <span className="text-zinc-300 font-black truncate ml-1">{info.genreCategory}</span>
+                              </div>
+                            )}
+                            {info.mood && (
+                              <div className="flex items-center justify-between border-b border-zinc-900/30 pb-0.5 min-w-0">
+                                <span className="text-zinc-600 font-bold uppercase tracking-wider text-[7px] shrink-0">MOOD:</span>
+                                <span className="text-zinc-300 font-black truncate ml-1">{info.mood}</span>
+                              </div>
+                            )}
+                            {info.vibe && (
+                              <div className="flex items-center justify-between border-b border-zinc-900/30 pb-0.5 min-w-0">
+                                <span className="text-zinc-600 font-bold uppercase tracking-wider text-[7px] shrink-0">VIBE:</span>
+                                <span className="text-orange-400 font-bold truncate ml-1">{info.vibe}</span>
+                              </div>
+                            )}
+                            {info.instruments && (
+                              <div className="flex items-center justify-between border-b border-zinc-900/30 pb-0.5 col-span-2 min-w-0">
+                                <span className="text-zinc-600 font-bold uppercase tracking-wider text-[7px] shrink-0">GEAR:</span>
+                                <span className="text-zinc-400 font-medium truncate ml-1">{info.instruments}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {info.cleanTags && info.cleanTags.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {info.cleanTags.slice(0, 4).map(tag => (
+                            <span key={tag} className="px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-[8px] font-black uppercase tracking-widest text-zinc-500">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 <div className="grid grid-cols-3 gap-2 border-t border-zinc-900 pt-4">
                    <div className="text-center">
@@ -1169,6 +1272,17 @@ export default function App() {
                       <p className="text-sm font-mono text-zinc-300">{(track.plays / 1000).toFixed(1)}k</p>
                    </div>
                 </div>
+
+                {track.lyrics && (
+                  <div className="border-t border-zinc-900 pt-3">
+                    <p className="text-[9px] font-black uppercase text-zinc-500 tracking-widest mb-1.5 flex items-center gap-1.5">
+                      <span>🎙️</span> LYRIC SHEET
+                    </p>
+                    <div className="max-h-24 overflow-y-auto bg-zinc-950/65 rounded-xl p-3 border border-zinc-900 font-mono text-[9px] text-zinc-400 leading-relaxed whitespace-pre-wrap select-all">
+                      {track.lyrics}
+                    </div>
+                  </div>
+                )}
              </div>
           </div>
         ))}
@@ -1505,6 +1619,7 @@ export default function App() {
                            onCreateVideo={() => setSelectedTrackForVideo(track)}
                            onAddToPlaylist={(plId) => addTrackToPlaylist(track.id, plId)}
                            playlists={playlists}
+                           onAnalyze={() => handleAnalyzeTrackManual(track)}
                            className="bg-black/40 backdrop-blur-md rounded-full border border-white/10"
                          />
                          <button 
@@ -3427,14 +3542,14 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
       <AnimatePresence>
         {selectedTrackForPromo && (
            <PromoPackModal 
-             {...({ key: "promo-pack-modal" } as any)}
+             key="promo-pack-modal"
              track={selectedTrackForPromo} 
              onClose={() => setSelectedTrackForPromo(null)} 
            />
         )}
         {editingTrack && (
           <EditTrackModal 
-            {...({ key: "edit-track-modal" } as any)}
+            key="edit-track-modal"
             track={editingTrack}
             onClose={() => setEditingTrack(null)}
             onSave={updateTrack}
@@ -3443,7 +3558,7 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
         )}
         {editingPlaylist && (
           <EditPlaylistModal 
-            {...({ key: "edit-playlist-modal" } as any)}
+            key="edit-playlist-modal"
             playlist={editingPlaylist}
             onClose={() => setEditingPlaylist(null)}
             onSave={(updates) => updatePlaylist(editingPlaylist.id, updates)}
@@ -3455,14 +3570,14 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
         )}
         {editingClient && (
           <EditClientModal 
-            {...({ key: "edit-client-modal" } as any)}
+            key="edit-client-modal"
             client={editingClient}
             onClose={() => setEditingClient(null)}
           />
         )}
         {(selectedTrackForVideo || selectedPlaylistForVideo) && (
           <VideoGenerationModal 
-            {...({ key: "video-generation-modal" } as any)}
+            key="video-generation-modal"
             track={selectedTrackForVideo || undefined}
             playlist={selectedPlaylistForVideo || undefined}
             onClose={() => {
@@ -3472,18 +3587,18 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
           />
         )}
         {showAddClient && (
-          <AddClientModal {...({ key: "add-client-modal" } as any)} onClose={() => setShowAddClient(false)} />
+          <AddClientModal key="add-client-modal" onClose={() => setShowAddClient(false)} />
         )}
         {selectedPlaylist && showAddTracksToPlaylist && (
           <AddTrackToPlaylistModal 
-            {...({ key: "add-track-to-playlist-modal" } as any)}
+            key="add-track-to-playlist-modal"
             playlist={selectedPlaylist}
             onClose={() => setShowAddTracksToPlaylist(false)}
           />
         )}
         {sharingAsset && (
           <ShareModal 
-            {...({ key: "share-modal" } as any)}
+            key="share-modal"
             track={sharingAsset.track}
             playlist={sharingAsset.playlist}
             onClose={() => setSharingAsset(null)}
@@ -3491,13 +3606,13 @@ SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpX...
         )}
         {selectedVideoForPreview && (
           <VideoPreviewModal 
-            {...({ key: "video-preview-modal" } as any)}
+            key="video-preview-modal"
             video={selectedVideoForPreview}
             onClose={() => setSelectedVideoForPreview(null)}
           />
         )}
         {showUploadVideo && (
-          <UploadVideoModal {...({ key: "upload-video-modal" } as any)} onClose={() => setShowUploadVideo(false)} />
+          <UploadVideoModal key="upload-video-modal" onClose={() => setShowUploadVideo(false)} />
         )}
       </AnimatePresence>
 

@@ -218,7 +218,7 @@ const performWebAudioAnalysis = async (
   }
 };
 
-export default function PromoPackModal({ track, onClose }: { track: Track; onClose: () => void }) {
+export default function PromoPackModal({ track, onClose }: { track: Track; onClose: () => void; key?: string | number }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [promoPack, setPromoPack] = useState<PromoPackType | null>(null);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);

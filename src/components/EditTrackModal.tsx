@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Save, Image as ImageIcon, Trash2, Loader2 } from 'lucide-react';
+import { X, Save, Image as ImageIcon, Trash2, Loader2, Sparkles } from 'lucide-react';
 import { Track } from '../types';
 import { useMediaStore } from '../context/MediaStoreContext';
 
@@ -8,17 +8,37 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
   onClose: () => void;
   onSave?: (id: string, updates: Partial<Track>) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+  key?: string | number;
 }) {
-  const { uploadFile } = useMediaStore();
+  const { uploadFile, analyzeTrack, addToast } = useMediaStore();
   const [formData, setFormData] = useState({ ...track });
   const [uploading, setUploading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [isDraggingLyrics, setIsDraggingLyrics] = useState(false);
+  const [lyricsFilename, setLyricsFilename] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const lyricsInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = async () => {
     if (onSave) {
       await onSave(track.id, formData);
     }
     onClose();
+  };
+
+  const handleLyricsFile = (f: File) => {
+    if (!f) return;
+    if (f.name.endsWith('.txt') || f.name.endsWith('.lrc') || f.type === 'text/plain') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result;
+        if (typeof text === 'string') {
+          setFormData(prev => ({ ...prev, lyrics: text }));
+          setLyricsFilename(f.name);
+        }
+      };
+      reader.readAsText(f);
+    }
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -50,12 +70,27 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-zinc-950 border border-zinc-900 rounded-[2.5rem] w-full max-w-xl overflow-hidden shadow-2xl">
-        <div className="p-8 border-b border-zinc-900 flex items-center justify-between">
+      <div 
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDraggingLyrics(true);
+        }}
+        onDragLeave={() => setIsDraggingLyrics(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDraggingLyrics(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) handleLyricsFile(file);
+        }}
+        className={`bg-zinc-950 border rounded-[2.5rem] w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl transition-all duration-300 ${
+          isDraggingLyrics ? 'border-orange-500 bg-zinc-950/90 scale-[1.01]' : 'border-zinc-900'
+        }`}
+      >
+        <div className="p-8 border-b border-zinc-900 flex items-center justify-between sticky top-0 bg-zinc-950 z-10">
           <h2 className="text-xl font-black uppercase tracking-tight">Edit Metadata</h2>
           <button onClick={onClose} className="p-2 hover:bg-zinc-900 rounded-full transition-colors"><X/></button>
         </div>
-        <div className="p-8 flex gap-8">
+        <div className="p-8 flex flex-col md:flex-row gap-8">
           {/* Artwork Upload */}
           <div className="w-48 space-y-4">
             <div 
@@ -124,6 +159,103 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
                     className="w-full mt-2 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 outline-none focus:border-orange-500"
                   />
                 </label>
+              </div>
+
+              {/* Dynamic Reanalyze Track Button */}
+              <button
+                type="button"
+                disabled={analyzing}
+                onClick={async () => {
+                  setAnalyzing(true);
+                  addToast(`Initiating high-precision AI diagnostics for "${formData.name}"...`, "info");
+                  try {
+                    const result = await analyzeTrack(formData.name, formData.duration);
+                    if (result) {
+                      setFormData(prev => ({
+                        ...prev,
+                        bpm: result.bpm,
+                        key_signature: result.key,
+                        tags: result.tags || prev.tags
+                      }));
+                      addToast("AI Analysis succeeded! Fields updated.", "success");
+                    }
+                  } catch (err: any) {
+                    console.error("AI Analysis failed:", err);
+                    addToast(`Diagnostics failed: ${err.message || err}`, "error");
+                  } finally {
+                    setAnalyzing(false);
+                  }
+                }}
+                className={`w-full py-2.5 border rounded-xl font-black uppercase tracking-widest text-[9px] flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  analyzing 
+                  ? 'bg-zinc-900/50 text-zinc-500 border-zinc-800 cursor-not-allowed' 
+                  : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border-orange-500/25 active:scale-95'
+                }`}
+              >
+                {analyzing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Running High-Precision Diagnostics...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-orange-500" />
+                    Reanalyze Track with Gemini AI
+                  </>
+                )}
+              </button>
+
+              {/* Lyrics Editing & Drop zone inside form */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">📝 Lyrics</span>
+                    {lyricsFilename && (
+                      <span className="text-[8px] font-mono bg-zinc-900 text-zinc-400 px-2 py-0.5 rounded border border-zinc-800 uppercase max-w-[120px] truncate" title={lyricsFilename}>
+                        File: {lyricsFilename}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      type="button"
+                      onClick={() => lyricsInputRef.current?.click()}
+                      className="text-[9px] font-black uppercase tracking-widest text-orange-400 hover:text-orange-300 transition-colors cursor-pointer"
+                    >
+                      Browse TXT
+                    </button>
+                    {formData.lyrics && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, lyrics: '' }));
+                          setLyricsFilename(null);
+                        }}
+                        className="text-[9px] font-black uppercase tracking-widest text-rose-500 hover:text-rose-400 transition-colors cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                <textarea
+                  value={formData.lyrics || ''}
+                  onChange={(e) => setFormData({ ...formData, lyrics: e.target.value })}
+                  placeholder="Drop a lyric text sheet anywhere here, or click Browse to load, or type lyrics manually..."
+                  className="w-full h-28 bg-zinc-900 border border-zinc-800 rounded-xl p-3 outline-none focus:border-orange-500 text-[11px] font-mono leading-relaxed resize-none text-zinc-300 placeholder:text-zinc-600"
+                />
+
+                <input 
+                  type="file" 
+                  ref={lyricsInputRef} 
+                  accept=".txt,.lrc,text/plain" 
+                  className="hidden" 
+                  onChange={(e) => {
+                    const selectedFile = e.target.files?.[0];
+                    if (selectedFile) handleLyricsFile(selectedFile);
+                  }} 
+                />
               </div>
             </div>
             

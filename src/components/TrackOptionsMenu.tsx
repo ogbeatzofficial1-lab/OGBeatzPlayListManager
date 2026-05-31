@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MoreVertical, Edit3, Share2, Download, Trash2, Video, Plus, Check } from 'lucide-react';
+import { MoreVertical, Edit3, Share2, Download, Trash2, Video, Plus, Check, Sparkles } from 'lucide-react';
 import { Track, Playlist } from '../types';
 import { cn } from '../lib/utils';
 
@@ -13,11 +13,12 @@ interface TrackOptionsMenuProps {
   onCreateVideo: () => void;
   onAddToPlaylist: (id: string) => void;
   playlists: Playlist[];
+  onAnalyze?: () => void;
   className?: string;
 }
 
 export default function TrackOptionsMenu({ 
-  track, onEdit, onShare, onDownload, onDelete, onCreatePromo, onCreateVideo, onAddToPlaylist, playlists, className 
+  track, onEdit, onShare, onDownload, onDelete, onCreatePromo, onCreateVideo, onAddToPlaylist, playlists, onAnalyze, className 
 }: TrackOptionsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -46,6 +47,11 @@ export default function TrackOptionsMenu({
             <button onClick={() => { onCreateVideo(); setIsOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-zinc-900 rounded-xl transition-colors">
               <Video className="w-3.5 h-3.5" /> Generate Video
             </button>
+            {onAnalyze && (
+              <button onClick={() => { onAnalyze(); setIsOpen(false); }} className="w-full flex items-center gap-3 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-orange-400 hover:bg-orange-500/10 rounded-xl transition-colors">
+                <Sparkles className="w-3.5 h-3.5 text-orange-500" /> AI Diagnostics
+              </button>
+            )}
             <div className="h-px bg-zinc-900 mx-2 my-1" />
             <div className="px-4 py-2 text-[8px] font-black uppercase tracking-[0.2em] text-zinc-600">Quick Add to:</div>
             {playlists.slice(0, 3).map(pl => (

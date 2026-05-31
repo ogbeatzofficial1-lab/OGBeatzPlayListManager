@@ -17,6 +17,7 @@ export interface Track {
   plays: number;
   likes: number;
   created_at: string;
+  lyrics?: string;
 }
 
 export interface Playlist {

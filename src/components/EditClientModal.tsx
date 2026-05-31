@@ -3,7 +3,7 @@ import { X, Save } from 'lucide-react';
 import { Client } from '../types';
 import { useMediaStore } from '../context/MediaStoreContext';
 
-export default function EditClientModal({ client, onClose }: { client: Client; onClose: () => void }) {
+export default function EditClientModal({ client, onClose }: { client: Client; onClose: () => void; key?: string | number }) {
   const [formData, setFormData] = useState({ ...client });
   const { updateClient } = useMediaStore();
 
