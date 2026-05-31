@@ -43,6 +43,36 @@ interface MediaStoreContextType {
   connected: boolean;
 }
 
+const restorePromoVideoUrls = async (videosList: PromoVideo[]): Promise<PromoVideo[]> => {
+  try {
+    const lf = (await import('localforage')).default;
+    const restored = await Promise.all(videosList.map(async (video) => {
+      // Check if we have raw video binary in localforage
+      const blob = await lf.getItem(`promo_video_blob_${video.id}`) as Blob | null;
+      if (blob instanceof Blob) {
+        // Revoke the old URL first if it starts with blob: (to save memory)
+        if (video.video_url?.startsWith('blob:')) {
+          try {
+            URL.revokeObjectURL(video.video_url);
+          } catch (e) {
+            // ignore
+          }
+        }
+        return {
+          ...video,
+          video_url: URL.createObjectURL(blob),
+          video_data: blob
+        };
+      }
+      return video;
+    }));
+    return restored;
+  } catch (err) {
+    console.warn("Could not restore promo video URLs from localforage:", err);
+    return videosList;
+  }
+};
+
 const UUID_TRACK_1 = "11111111-1111-1111-1111-111111111111";
 const UUID_TRACK_2 = "22222222-2222-2222-2222-222222222222";
 const UUID_TRACK_3 = "33333333-3333-3333-3333-333333333333";
@@ -675,7 +705,8 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
               try {
                 const data = await fetchWithRetry('promo_videos');
                 if (data) {
-                  setPromoVideos(data);
+                  const restored = await restorePromoVideoUrls(data);
+                  setPromoVideos(restored);
                 } else {
                   console.warn("promo_videos table fetch returned null. Utilizing empty fallback.");
                   setPromoVideos([]);
@@ -791,10 +822,34 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
         } else {
           setLoadingProgress(100);
           setLoadingStatusText("Local Fallback Mode active.");
+          try {
+            const cached = localStorage.getItem('ogbeatz_promo_videos');
+            if (cached) {
+              setPromoVideos(JSON.parse(cached));
+            }
+          } catch (e) {
+            console.warn("Could not read local cached promo videos:", e);
+          }
         }
       } catch (err) {
         console.error("Error during MediaStore init:", err);
       } finally {
+        try {
+          await new Promise<void>((resolve) => {
+            setPromoVideos(prev => {
+              restorePromoVideoUrls(prev).then(restored => {
+                setPromoVideos(restored);
+                resolve();
+              }).catch(() => {
+                resolve();
+              });
+              return prev;
+            });
+          });
+        } catch (restoreErr) {
+          console.warn("Error resolving localforage promo videos in init finally block:", restoreErr);
+        }
+
         setLoadingProgress(100);
         setLoadingStatusText("Sync is complete...");
         await new Promise(resolve => setTimeout(resolve, 800));
@@ -1472,16 +1527,72 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
   };
 
   const addPromoVideo = async (video: Partial<PromoVideo>) => {
+    const videoId = video.id || uuidv4();
+    let videoUrl = video.video_url || '';
+    let thumbnailUrl = video.thumbnail_url || '';
+
+    // 1. Save binary video_data Blob to localforage for high-reliability offline/local caching
+    if (video.video_data instanceof Blob) {
+      try {
+        const lf = (await import('localforage')).default;
+        await lf.setItem(`promo_video_blob_${videoId}`, video.video_data);
+        console.log(`Saved video Blob to localforage for ID: ${videoId}`);
+      } catch (lfErr) {
+        console.warn("Failed to save video Blob to localforage:", lfErr);
+      }
+    }
+
+    // 2. If online and Supabase is available, attempt real cloud uploads
+    if (supabase) {
+      // 2a. Upload video Blob
+      if (video.video_data instanceof Blob) {
+        try {
+          addToast("Uploading render to secure Cloud Vault...", 'info');
+          const fileToUpload = new File(
+            [video.video_data], 
+            `${videoId}.mp4`, 
+            { type: video.video_data.type || 'video/mp4' }
+          );
+          const uploadedUrl = await uploadFile('promo_videos', fileToUpload);
+          if (uploadedUrl) {
+            videoUrl = uploadedUrl;
+            addToast("Promo render successfully integrated with Cloud Vault!", 'success');
+          }
+        } catch (upErr: any) {
+          console.warn("Could not upload video to Supabase Storage:", upErr);
+        }
+      }
+
+      // 2b. Upload thumbnail if custom image_data is provided
+      if (video.thumbnail_data instanceof Blob) {
+        try {
+          const thumbToUpload = new File(
+            [video.thumbnail_data],
+            `thumb_${videoId}.jpg`,
+            { type: 'image/jpeg' }
+          );
+          const uploadedThumb = await uploadFile('promo_videos', thumbToUpload);
+          if (uploadedThumb) {
+            thumbnailUrl = uploadedThumb;
+          }
+        } catch (thumbErr) {
+          console.warn("Thumb upload failed:", thumbErr);
+        }
+      }
+    }
+
     const newVideo: PromoVideo = {
-      id: uuidv4(),
-      video_url: video.video_url || '',
-      thumbnail_url: video.thumbnail_url || '',
+      id: videoId,
+      video_url: videoUrl,
+      thumbnail_url: thumbnailUrl || '/ogbeatz_logo.svg',
       style: video.style || 'minimalist',
-      status: video.status || 'processing',
+      status: video.status || 'ready',
       created_at: new Date().toISOString(),
       ...video
     };
-    setPromoVideos(prev => [...prev, newVideo]);
+
+    setPromoVideos(prev => [...prev.filter(v => v.id !== videoId), newVideo]);
+
     if (supabase) {
       const dbVideo = { ...newVideo } as any;
       // Strip out non-serializable binary data before inserting into database table
@@ -1499,6 +1610,15 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
 
   const deletePromoVideo = async (id: string) => {
     setPromoVideos(prev => prev.filter(v => v.id !== id));
+    
+    // Purge local storage binary from localforage
+    try {
+      const lf = (await import('localforage')).default;
+      await lf.removeItem(`promo_video_blob_${id}`);
+    } catch (e) {
+      console.warn("Could not purge local video blob:", e);
+    }
+
     if (supabase) {
       const { error } = await supabase.from('promo_videos').delete().eq('id', id);
       if (error) {
