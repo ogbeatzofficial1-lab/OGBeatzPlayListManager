@@ -599,13 +599,7 @@ export default function ClientPortal({ client }: { client: Client }) {
                   <div className="flex justify-between items-start gap-3">
                     <div className="min-w-0 flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-800 bg-slate-900 flex-shrink-0 relative group">
-                        {t.image_url ? (
-                          <img src={t.image_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-600">
-                            <Music className="w-4 h-4" />
-                          </div>
-                        )}
+                        <img src={t.image_url || "/ogbeatz_logo.svg"} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         {isSelected && isPlaying && (
                           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
@@ -686,18 +680,7 @@ export default function ClientPortal({ client }: { client: Client }) {
                 
                 {/* Image Cover art container frame with absolute vinyl element layout */}
                 <div className="relative mx-auto w-52 h-52 md:w-64 md:h-64 rounded-full group shadow-[0_0_50px_rgba(245,158,11,0.08)] bg-slate-900 border-4 border-slate-900/80 overflow-hidden flex items-center justify-center flex-shrink-0">
-                  {activeTrack.image_url ? (
-                    <img 
-                      src={activeTrack.image_url} 
-                      className={cn("w-full h-full object-cover rounded-full transition-transform duration-1000", isPlaying ? "animate-spin" : "")} 
-                      style={{ animationDuration: '20s' }}
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-slate-900 rounded-full flex items-center justify-center">
-                      <Music className="w-16 h-16 text-slate-800" />
-                    </div>
-                  )}
+                  <img src={activeTrack.image_url || "/ogbeatz_logo.svg"} className={cn("w-full h-full object-cover rounded-full transition-transform duration-1000", isPlaying ? "animate-spin" : "")} style={{ animationDuration: '20s' }} referrerPolicy="no-referrer" />
 
                   {/* High Fidelity Centralized Play state Trigger */}
                   <div className={cn(
@@ -842,7 +825,7 @@ export default function ClientPortal({ client }: { client: Client }) {
               </div>
             ) : (
               <div className="p-12 text-center bg-slate-900/20 border-2 border-dashed border-slate-900 rounded-[2.5em] space-y-4">
-                <Music className="w-12 h-12 text-slate-800 mx-auto animate-pulse" />
+                <img src="/ogbeatz_logo.svg" className="w-16 h-16 mx-auto animate-pulse opacity-20" referrerPolicy="no-referrer" />
                 <p className="text-xs font-mono uppercase text-slate-500 tracking-widest">Select an active track reference from dashboard to boot review console</p>
               </div>
             )}

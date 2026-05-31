@@ -55,6 +55,7 @@ Main catalog mapping metadata and audio resources for beat drafts, samples, and 
 | `plays` | `INTEGER` | `0` | `NOT NULL` | Play metric counter. |
 | `likes` | `INTEGER` | `0` | `NOT NULL` | Likes metric counter. |
 | `tags` | `TEXT[]` | `'{}'` | | Search descriptors or style classification list. |
+| `lyrics` | `TEXT` | `NULL` | | Embedded textual lyrics, transcriptions, or song notes. |
 | `status` | `TEXT` | `'processing'` | `CHECK IN ('ready', 'processing', 'error')` | Streaming transcoder processing status. |
 | `created_at` | `TIMESTAMPTZ`| `NOW()` | | Timestamp when metadata row was made. |
 

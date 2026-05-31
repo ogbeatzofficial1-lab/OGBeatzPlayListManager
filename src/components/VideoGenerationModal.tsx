@@ -611,7 +611,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     }
 
     let coverImg: HTMLImageElement | null = null;
-    const coverArtUrl = activeTrack?.image_url || '/input_file_2.png';
+    const coverArtUrl = activeTrack?.image_url || '/ogbeatz_logo.svg';
     if (coverArtUrl) {
       coverImg = new Image();
       coverImg.crossOrigin = 'anonymous';
@@ -785,7 +785,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
       // Load Image
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.src = activeTrack?.image_url || '/input_file_2.png';
+      img.src = activeTrack?.image_url || '/ogbeatz_logo.svg';
       await new Promise((resolve, reject) => {
         img.onload = resolve;
         img.onerror = reject;

@@ -1123,14 +1123,11 @@ export default function App() {
         {filteredTracks.map(track => (
           <div key={track.id} className="group relative bg-zinc-950 border border-zinc-900 rounded-[2rem] overflow-hidden hover:border-zinc-700 transition-all duration-500 shadow-2xl shadow-black/50 hover:shadow-orange-500/5">
               <div className="aspect-square relative overflow-hidden bg-zinc-900 flex items-center justify-center">
-                {track.image_url ? (
-                  <img src={track.image_url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
-                ) : (
-                  <div className="flex flex-col items-center gap-4 text-zinc-800 group-hover:text-zinc-700 transition-colors">
-                    <Music className="w-20 h-20" />
-                    <span className="text-[10px] font-black tracking-widest uppercase opacity-40">NO ARTWORK</span>
-                  </div>
-                )}
+                <img 
+                  src={track.image_url || "/ogbeatz_logo.svg"} 
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" 
+                  referrerPolicy="no-referrer"
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                 
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500">
@@ -1500,9 +1497,13 @@ export default function App() {
                 <Plus className="w-5 h-5 rotate-45" />
               </button>
             )}
-            {selectedPlaylist?.image_url && (
-              <div className="w-20 h-20 rounded-3xl overflow-hidden border border-zinc-800 shrink-0 shadow-2xl">
-                <img src={selectedPlaylist.image_url} className="w-full h-full object-cover" />
+            {selectedPlaylist && (
+              <div className="w-20 h-20 rounded-3xl overflow-hidden border border-zinc-800 shrink-0 shadow-2xl bg-zinc-950 flex items-center justify-center">
+                <img 
+                  src={selectedPlaylist.image_url || "/ogbeatz_logo.svg"} 
+                  className="w-full h-full object-cover" 
+                  referrerPolicy="no-referrer"
+                />
               </div>
             )}
             <div>
@@ -1554,8 +1555,12 @@ export default function App() {
           <div className="col-span-full space-y-4">
             <div className="flex justify-between items-center bg-zinc-950 border border-zinc-900 rounded-3xl p-6 mb-8">
                <div className="flex gap-4 items-center">
-                  <div className="w-12 h-12 rounded-xl bg-zinc-900 flex items-center justify-center text-zinc-600">
-                    <Music className="w-6 h-6" />
+                  <div className="w-12 h-12 rounded-xl bg-zinc-900 overflow-hidden flex items-center justify-center text-zinc-650">
+                    <img 
+                      src="/ogbeatz_logo.svg" 
+                      className="w-full h-full object-cover" 
+                      referrerPolicy="no-referrer"
+                    />
                   </div>
                   <div>
                     <h3 className="text-lg font-black uppercase tracking-tight">Compilation Logic</h3>
@@ -1656,7 +1661,11 @@ export default function App() {
                 })
               ) : (
                 <div className="col-span-full py-32 bg-zinc-950 border border-dashed border-zinc-900 rounded-[3rem] flex flex-col items-center justify-center text-center">
-                  <Music className="w-12 h-12 mb-4 opacity-20" />
+                  <img 
+                    src="/ogbeatz_logo.svg" 
+                    className="w-16 h-16 mb-4 opacity-25" 
+                    referrerPolicy="no-referrer" 
+                  />
                   <h3 className="text-xl font-bold uppercase italic tracking-tight">Empty Collection</h3>
                   <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest max-w-xs mx-auto mt-2 leading-relaxed">
                     This reference set currently lacks mapped audio assets.
@@ -1686,11 +1695,14 @@ export default function App() {
                       <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-all" />
                     </>
                   ) : (
-                    <div 
-                      className="w-full h-full opacity-80 group-hover:opacity-100 transition-opacity"
-                      style={{ background: `linear-gradient(135deg, ${pl.start_color}, ${pl.end_color})` }}
-                    />
-                  )}
+                     <>
+                       <img src="/ogbeatz_logo.svg" className="absolute inset-0 w-full h-full object-cover opacity-25 group-hover:opacity-45 transition-all duration-1000" referrerPolicy="no-referrer" />
+                       <div 
+                         className="w-full h-full opacity-70 group-hover:opacity-80 transition-opacity mix-blend-multiply"
+                         style={{ background: `linear-gradient(135deg, ${pl.start_color}, ${pl.end_color})` }}
+                       />
+                     </>
+                   )}
                </div>
               <div className="absolute top-8 right-8 flex gap-2">
                 <button 
@@ -3005,20 +3017,14 @@ export default function App() {
               
               {/* Rotating Vinyl disk album display */}
               <div className="relative w-40 h-40 xl:w-44 xl:h-44 rounded-full bg-zinc-900 border-4 border-zinc-850 flex items-center justify-center shadow-xl group overflow-hidden">
-                {playerTrack.image_url ? (
-                  <img 
-                    src={playerTrack.image_url} 
-                    className={cn(
-                      "w-full h-full object-cover rounded-full transition-transform duration-[15000s] ease-linear",
-                      isPlaying ? "rotate-[360deg] scale-102 duration-[25s]" : ""
-                    )} 
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-full h-full bg-zinc-950 rounded-full flex items-center justify-center">
-                    <Music className="w-12 h-12 text-zinc-800" />
-                  </div>
-                )}
+                <img 
+                  src={playerTrack.image_url || "/ogbeatz_logo.svg"} 
+                  className={cn(
+                    "w-full h-full object-cover rounded-full transition-transform duration-[15000s] ease-linear",
+                    isPlaying ? "rotate-[360deg] scale-102 duration-[25s]" : ""
+                  )} 
+                  referrerPolicy="no-referrer"
+                />
                 
                 {/* Center hole vinyl ring */}
                 <div className="absolute w-10 h-10 bg-black rounded-full border-2 border-zinc-850/80 flex items-center justify-center z-10">

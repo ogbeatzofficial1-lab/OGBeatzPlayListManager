@@ -270,11 +270,7 @@ export default function SharePortal({ track: initialTrack, playlist, shareLink }
                  animate={{ scale: 1, opacity: 1 }}
                  className="relative w-full max-w-[400px] aspect-square rounded-[4rem] overflow-hidden shadow-[0_0_120px_rgba(249,115,22,0.15)] border-2 border-white/5 bg-zinc-900 group"
                >
-                  {activeTrack?.image_url ? (
-                    <img src={activeTrack.image_url} className="w-full h-full object-cover transition-transform duration-[20s] group-hover:scale-110" />
-                  ) : (
-                    <Music className="absolute inset-0 m-auto w-16 h-16 text-zinc-800" />
-                  )}
+                  <img src={activeTrack?.image_url || "/ogbeatz_logo.svg"} className="w-full h-full object-cover transition-transform duration-[20s] group-hover:scale-110" referrerPolicy="no-referrer" />
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 backdrop-blur-sm">
                     <button 
                       onClick={togglePlay}

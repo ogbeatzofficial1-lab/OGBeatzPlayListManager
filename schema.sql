@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS tracks (
   plays INTEGER NOT NULL DEFAULT 0,
   likes INTEGER NOT NULL DEFAULT 0,
   tags TEXT[] DEFAULT '{}',
+  lyrics TEXT,
   status TEXT NOT NULL CHECK (status IN ('ready', 'processing', 'error')) DEFAULT 'processing',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -143,7 +143,7 @@ export default function ShareModal({ track, playlist, onClose }: ShareModalProps
                 <div className="space-y-8">
                    <div className="flex items-center gap-4 p-6 bg-zinc-900/50 rounded-[2rem] border border-zinc-900">
                       <div className="w-16 h-16 rounded-2xl overflow-hidden shrink-0">
-                         <img src={track?.image_url || playlist?.image_url || '/input_file_2.png'} className="w-full h-full object-cover" />
+                         <img src={track?.image_url || playlist?.image_url || '/ogbeatz_logo.svg'} className="w-full h-full object-cover" />
                       </div>
                       <div>
                          <p className="text-[10px] font-black uppercase tracking-widest text-orange-500">{assetType}</p>

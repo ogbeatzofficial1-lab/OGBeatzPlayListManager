@@ -25,11 +25,11 @@ export default function AudioPlayer({ onEdit }: AudioPlayerProps) {
       {/* Track Info */}
       <div className="flex items-center gap-4 w-1/3">
         <div className="w-12 h-12 rounded-lg overflow-hidden border border-zinc-800 bg-zinc-900 flex items-center justify-center">
-          {activeTrack.image_url ? (
-            <img src={activeTrack.image_url} className="w-full h-full object-cover" />
-          ) : (
-            <Music className="w-6 h-6 text-zinc-800" />
-          )}
+          <img 
+            src={activeTrack.image_url || "/ogbeatz_logo.svg"} 
+            className="w-full h-full object-cover" 
+            referrerPolicy="no-referrer"
+          />
         </div>
         <div className="min-w-0">
           <h4 className="text-sm font-black uppercase tracking-tight truncate">{activeTrack.name}</h4>
