@@ -12,7 +12,7 @@ interface VideoPreviewModalProps {
 }
 
 export default function VideoPreviewModal({ video, onClose }: VideoPreviewModalProps) {
-  const { deletePromoVideo, tracks, playlists } = useMediaStore();
+  const { deletePromoVideo, tracks, playlists, addToast } = useMediaStore();
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const track = tracks.find(t => t.id === video.track_id);
@@ -175,6 +175,10 @@ export default function VideoPreviewModal({ video, onClose }: VideoPreviewModalP
                    src={track.file_url} 
                    autoPlay 
                    controls 
+                   onError={(e) => {
+                     console.warn("Audio load failure:", track.file_url);
+                     addToast?.("The preview audio file is currently unreachable. Enjoying video-only showcase.", "info");
+                   }}
                    className="absolute bottom-8 w-3/4 max-w-md opacity-80 hover:opacity-100 transition-opacity z-10" 
                  />
                )}
