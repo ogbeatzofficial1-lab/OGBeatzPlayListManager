@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Video, Sparkles, Wand2, Loader2, Play, Pause, Music, Sliders, CheckCircle2, AlertCircle, Share2, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { v4 as uuidv4 } from 'uuid';
 import { useMediaStore } from '../context/MediaStoreContext';
 import { Track, Playlist, PromoVideo } from '../types';
 import { generateVideoAesthetic } from '../services/geminiService';
@@ -16,7 +17,8 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
   const { addPromoVideo, promoVideos, tracks: allTracks, updateTrack, addToast } = useMediaStore();
   const [step, setStep] = useState<'config' | 'processing' | 'preview'>('config');
   const [style, setStyle] = useState('minimalist');
-  const [aspectRatio, setAspectRatio] = useState<'vertical' | 'square' | 'horizontal'>('vertical');
+  const [aspectRatio, setAspectRatio] = useState<'vertical' | 'square' | 'horizontal' | 'auto'>('auto');
+  const [resolvedAspectRatio, setResolvedAspectRatio] = useState<'vertical' | 'square' | 'horizontal'>('vertical');
   const [progress, setProgress] = useState(0);
   const [aesthetic, setAesthetic] = useState<any>(null);
   const [generatedVideo, setGeneratedVideo] = useState<PromoVideo | null>(null);
@@ -27,6 +29,9 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
   const [lyricStyle, setLyricStyle] = useState<'retro' | 'serif' | 'mono' | 'impact'>('retro');
   const [lyricColor, setLyricColor] = useState('#ffffff');
   const [lyricFontSize, setLyricFontSize] = useState<number>(36);
+  const [lyricLineHeight, setLyricLineHeight] = useState<number>(1.35);
+  const [lyricFontWeight, setLyricFontWeight] = useState<string>('900');
+  const [lyricFormat, setLyricFormat] = useState<'bounce' | 'slide' | 'fade' | 'zoom' | 'word'>('bounce');
 
   // AI-powered timestamp lyrics extraction/handling states
   const [isGeneratingLyrics, setIsGeneratingLyrics] = useState(false);
@@ -51,6 +56,16 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
   const [chromaticOffset, setChromaticOffset] = useState<number>(4.0);
   const [strobeBeatIntensity, setStrobeBeatIntensity] = useState<number>(0.35);
   const [shakeBeatIntensity, setShakeBeatIntensity] = useState<number>(0.6);
+
+  // 100% Premium non-generic Template Controls for Complete User Overrides
+  const [showBgBlur, setShowBgBlur] = useState<boolean>(true);
+  const [showOrbitRings, setShowOrbitRings] = useState<boolean>(false);
+  const [showSpectralBars, setShowSpectralBars] = useState<boolean>(true);
+  const [showGridOverlay, setShowGridOverlay] = useState<boolean>(false);
+  const [showWatermarks, setShowWatermarks] = useState<boolean>(false);
+  const [albumArtShape, setAlbumArtShape] = useState<'square' | 'circle' | 'hidden'>('square');
+  const [shadowStrength, setShadowStrength] = useState<number>(0.6);
+  const [pureCoverFit, setPureCoverFit] = useState<boolean>(false);
 
   // Fade-in / Fade-out states
   const [fadeInEnabled, setFadeInEnabled] = useState(true);
@@ -124,6 +139,38 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
       setLyricsText(activeTrack.lyrics);
     }
   }, [activeTrack]);
+
+  useEffect(() => {
+    if (aspectRatio !== 'auto') {
+      setResolvedAspectRatio(aspectRatio);
+      return;
+    }
+
+    const coverArtUrl = activeTrack?.image_url || '/ogbeatz_logo.svg';
+    if (!coverArtUrl) {
+      setResolvedAspectRatio('vertical');
+      return;
+    }
+
+    const tempImg = new Image();
+    tempImg.crossOrigin = 'anonymous';
+    tempImg.onload = () => {
+      if (tempImg.width > 0 && tempImg.height > 0) {
+        const ar = tempImg.width / tempImg.height;
+        if (ar > 1.25) {
+          setResolvedAspectRatio('horizontal');
+        } else if (ar < 0.8) {
+          setResolvedAspectRatio('vertical');
+        } else {
+          setResolvedAspectRatio('square');
+        }
+      }
+    };
+    tempImg.onerror = () => {
+      setResolvedAspectRatio('vertical');
+    };
+    tempImg.src = coverArtUrl;
+  }, [aspectRatio, activeTrack?.image_url]);
 
   const handleGenerateLyrics = async () => {
     setIsGeneratingLyrics(true);
@@ -313,6 +360,225 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     ctx.fillStyle = '#09090b';
     ctx.fillRect(0, 0, width, height);
 
+    if (pureCoverFit) {
+      if ('filter' in ctx) {
+        ctx.filter = 'none';
+      }
+      
+      // Draw Cover Art background with perfect cover-fit aspect ratio
+      if (imgElement && imgElement.width > 0 && imgElement.height > 0) {
+        ctx.save();
+        const imgAR = imgElement.width / imgElement.height;
+        const canvasAR = width / height;
+        let renderW = width;
+        let renderH = height;
+        let x = 0;
+        let y = 0;
+
+        if (imgAR > canvasAR) {
+          renderH = height;
+          renderW = height * imgAR;
+          x = (width - renderW) / 2;
+        } else {
+          renderW = width;
+          renderH = width / imgAR;
+          y = (height - renderH) / 2;
+        }
+        
+        ctx.drawImage(imgElement, x, y, renderW, renderH);
+        ctx.restore();
+      } else {
+        // Fallback charcoal black minimalist grid background
+        ctx.save();
+        ctx.fillStyle = '#0f0f12';
+        ctx.fillRect(0, 0, width, height);
+        
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+        ctx.lineWidth = 1;
+        const step = Math.min(width, height) / 10;
+        for (let ix = 0; ix < width; ix += step) {
+          ctx.beginPath();
+          ctx.moveTo(ix, 0);
+          ctx.lineTo(ix, height);
+          ctx.stroke();
+        }
+        for (let iy = 0; iy < height; iy += step) {
+          ctx.beginPath();
+          ctx.moveTo(0, iy);
+          ctx.lineTo(width, iy);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // Drawing only the Embedded Lip Sync / Dynamic Lyric Overlay for absolute purity
+      if (overlayLyrics && parsedLyrics && parsedLyrics.length > 0) {
+        let activeLine = parsedLyrics[0];
+        for (let i = 0; i < parsedLyrics.length; i++) {
+          if (time >= parsedLyrics[i].time) {
+            activeLine = parsedLyrics[i];
+          }
+        }
+        
+        ctx.save();
+        // Set styling typography parameters based on choice (retro, serif, mono, impact)
+        let fontName = '"Inter", sans-serif';
+        const fontScaleFactor = width / 640;
+        const fontSizePx = Math.max(12, Math.round(lyricFontSize * fontScaleFactor));
+        const fontSize = `${fontSizePx}px`;
+        const uppercase = lyricStyle === 'retro' || lyricStyle === 'impact';
+        
+        if (lyricStyle === 'retro') {
+          fontName = '"Space Grotesk", sans-serif';
+          ctx.font = `${lyricFontWeight} italic ${fontSize} ${fontName}`;
+          ctx.fillStyle = lyricColor || '#f97316';
+          ctx.shadowColor = lyricColor || '#f97316';
+          ctx.shadowBlur = Math.round(18 * fontScaleFactor);
+        } else if (lyricStyle === 'serif') {
+          fontName = '"Playfair Display", serif';
+          ctx.font = `italic ${lyricFontWeight} ${fontSize} ${fontName}`;
+          ctx.fillStyle = lyricColor || '#ffffff';
+          ctx.shadowColor = 'rgba(0,0,0,0.7)';
+          ctx.shadowBlur = Math.round(12 * fontScaleFactor);
+        } else if (lyricStyle === 'mono') {
+          fontName = '"JetBrains Mono", monospace';
+          ctx.font = `${lyricFontWeight} ${fontSize} ${fontName}`;
+          ctx.fillStyle = lyricColor || '#10b981';
+          ctx.shadowColor = lyricColor || '#10b981';
+          ctx.shadowBlur = Math.round(14 * fontScaleFactor);
+        } else {
+          fontName = '"Inter", sans-serif';
+          ctx.font = `${lyricFontWeight} ${fontSize} ${fontName}`;
+          ctx.fillStyle = lyricColor || '#ffffff';
+          ctx.shadowColor = 'rgba(0,0,0,0.9)';
+          ctx.shadowBlur = Math.round(15 * fontScaleFactor);
+        }
+        
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = Math.max(3, Math.round(8 * fontScaleFactor));
+        
+        let displayText = uppercase ? activeLine.text.toUpperCase() : activeLine.text;
+        
+        let scaleEffect = 1.0;
+        let opacity = 1.0;
+        let translateY = 0;
+        const timeDelta = time - activeLine.time;
+        let drawTextLines: string[] = [];
+
+        // Dynamic formatting transitions
+        if (lyricFormat === 'word') {
+          const rawWords = activeLine.text.split(/\s+/).filter(Boolean);
+          if (rawWords.length > 0) {
+            let lineDuration = 4.0;
+            const activeIndex = parsedLyrics.indexOf(activeLine);
+            if (activeIndex !== -1 && activeIndex < parsedLyrics.length - 1) {
+              lineDuration = Math.max(1.0, parsedLyrics[activeIndex + 1].time - activeLine.time);
+            }
+            
+            // Highlight active word
+            const wordRatio = Math.min(0.99, timeDelta / lineDuration);
+            const wordIndex = Math.min(rawWords.length - 1, Math.floor(wordRatio * rawWords.length));
+            const activeWord = uppercase ? rawWords[wordIndex].toUpperCase() : rawWords[wordIndex];
+            
+            // Pop transition for individual flashing word
+            const wordDuration = lineDuration / rawWords.length;
+            const wordTimeDelta = timeDelta % wordDuration;
+            const t = Math.min(1.0, wordTimeDelta / Math.min(0.18, wordDuration));
+            scaleEffect = 0.85 + Math.sin(t * Math.PI * 0.5) * 0.22;
+            opacity = 1.0;
+            drawTextLines = [activeWord];
+          } else {
+            drawTextLines = [''];
+          }
+        } else {
+          // Bounded multi-line wrapping layer to prevent closed captions from bleeding off-canvas
+          const maxWidth = width * 0.82;
+          const words = displayText.split(' ');
+          let currentLine = '';
+
+          for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            const testLine = currentLine ? currentLine + ' ' + word : word;
+            const testWidth = ctx.measureText(testLine).width;
+            if (testWidth > maxWidth && i > 0) {
+              drawTextLines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          if (currentLine) {
+            drawTextLines.push(currentLine);
+          }
+
+          if (lyricFormat === 'slide') {
+            const slideDuration = 0.45;
+            if (timeDelta < slideDuration) {
+              const t = timeDelta / slideDuration;
+              const ease = 1 - Math.pow(1 - t, 3); // Cubic ease out
+              translateY = (1 - ease) * (fontSizePx * 1.0);
+              opacity = Math.min(1.0, t * 1.5);
+            } else {
+              translateY = 0;
+              opacity = 1.0;
+            }
+            scaleEffect = 1.0;
+          } else if (lyricFormat === 'fade') {
+            const fadeDuration = 0.35;
+            if (timeDelta < fadeDuration) {
+              opacity = timeDelta / fadeDuration;
+            } else {
+              opacity = 1.0;
+            }
+            scaleEffect = 1.0;
+          } else if (lyricFormat === 'zoom') {
+            const zoomDuration = 0.5;
+            if (timeDelta < zoomDuration) {
+              const t = timeDelta / zoomDuration;
+              scaleEffect = 1.35 - t * 0.35;
+              opacity = t;
+            } else {
+              const drift = timeDelta - zoomDuration;
+              scaleEffect = 1.0 + Math.min(0.04, drift * 0.003);
+              opacity = 1.0;
+            }
+          } else {
+            // Default: 'bounce' Style
+            const bounceDuration = 0.5;
+            if (timeDelta < bounceDuration) {
+              const t = timeDelta / bounceDuration;
+              scaleEffect = 0.70 + Math.sin(t * Math.PI * 1.4) * 0.35 * (1 - t);
+              opacity = Math.min(1.0, t * 1.5);
+            } else {
+              scaleEffect = 1.0;
+              opacity = 1.0;
+            }
+          }
+        }
+
+        // Place text in precise dynamic quadrant
+        const lyricY = aspect === 'vertical' ? height * 0.58 : height * 0.60;
+        
+        ctx.globalAlpha = opacity;
+        ctx.translate(width / 2, lyricY + translateY);
+        ctx.scale(scaleEffect, scaleEffect);
+
+        const lineHeight = fontSizePx * lyricLineHeight; // Comfortable leading for multi-line subtitles
+        const totalHeight = (drawTextLines.length - 1) * lineHeight;
+        const startY = -totalHeight / 2; // Harmonious balance: center lines on the target vertical coordinate
+
+        for (let i = 0; i < drawTextLines.length; i++) {
+          const lineY = startY + i * lineHeight;
+          ctx.strokeText(drawTextLines[i], 0, lineY);
+          ctx.fillText(drawTextLines[i], 0, lineY);
+        }
+        
+        ctx.restore();
+      }
+      return;
+    }
+
     // Aspect-ratio layout adaptive coordinates and sizes to make sure it adjusts to ratio perfectly
     let albumArtY = height * 0.38;
     let textBaseY = height * 0.72;
@@ -386,8 +652,8 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
       ctx.filter = filterString;
     }
 
-    // 2. Draw Blurred Cover Art background for depth
-    if (imgElement) {
+    // 2. Draw Blurred Cover Art background for depth (complete control: showBgBlur)
+    if (imgElement && showBgBlur) {
       ctx.save();
       ctx.globalAlpha = ccPreset === 'templar' ? 0.12 : 0.20;
       
@@ -415,6 +681,27 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
       ctx.restore();
     }
 
+    // Dynamic grid overlay if enabled for professional layout alignment
+    if (showGridOverlay) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
+      ctx.lineWidth = 1;
+      const gridSize = 40;
+      for (let gx = 0; gx < width; gx += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(gx, 0);
+        ctx.lineTo(gx, height);
+        ctx.stroke();
+      }
+      for (let gy = 0; gy < height; gy += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, gy);
+        ctx.lineTo(width, gy);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // Main coordinates jolt effect for organic beat transition moves
     ctx.save();
     if (shakeBeat && (shiftX !== 0 || shiftY !== 0 || globalScale !== 1.0)) {
@@ -426,66 +713,72 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     // 3. Draw style-specific overlays
     ctx.save();
     if (style === 'minimalist') {
-      // Sleek Orbit lines centering on dynamic art position
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(width / 2, albumArtY, albumArtSize * 0.6 * artScale, 0, Math.PI * 2);
-      ctx.stroke();
+      // Tech orbit rings (completely controllable)
+      if (showOrbitRings) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(width / 2, albumArtY, albumArtSize * 0.6 * artScale, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       // Sharp clean waveform lines
-      const barCount = 48;
-      const barWidth = (width * 0.75) / barCount;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-      const startX = width * 0.125;
+      if (showSpectralBars) {
+        const barCount = 48;
+        const barWidth = (width * 0.75) / barCount;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        const startX = width * 0.125;
 
-      for (let i = 0; i < barCount; i++) {
-        const freqVal = freqData[Math.floor((i / barCount) * freqData.length)] || 0;
-        const normVal = freqVal / 255;
-        const h = Math.max(3, normVal * 70 + Math.abs(Math.sin(time * 3.5 + i * 0.15)) * 6);
-        ctx.fillRect(startX + i * barWidth, waveBaselineY - h, barWidth - 1.5, h);
+        for (let i = 0; i < barCount; i++) {
+          const freqVal = freqData[Math.floor((i / barCount) * freqData.length)] || 0;
+          const normVal = freqVal / 255;
+          const h = Math.max(3, normVal * 70 + Math.abs(Math.sin(time * 3.5 + i * 0.15)) * 6);
+          ctx.fillRect(startX + i * barWidth, waveBaselineY - h, barWidth - 1.5, h);
+        }
       }
     } 
     else if (style === 'grunge') {
-      // Aggressive distressed UI offsets
-      const glitchOffset = Math.random() < 0.07 ? (Math.random() - 0.5) * 14 : 0;
-      
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.2)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.rect(width * 0.12 + glitchOffset, height * 0.12, width * 0.76, height * 0.76);
-      ctx.stroke();
+      // Clean up aggressive red generic details if they set borders off
+      if (showOrbitRings || showGridOverlay) {
+        const glitchOffset = Math.random() < 0.07 ? (Math.random() - 0.5) * 14 : 0;
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.2)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.rect(width * 0.12 + glitchOffset, height * 0.12, width * 0.76, height * 0.76);
+        ctx.stroke();
 
-      // Industrial crosshair
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.15)';
-      ctx.beginPath();
-      ctx.moveTo(width / 2 + glitchOffset, 0);
-      ctx.lineTo(width / 2 + glitchOffset, height);
-      ctx.moveTo(0, height / 2);
-      ctx.lineTo(width, height / 2);
-      ctx.stroke();
-
-      // Violent spark frequencies
-      const points = 24;
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      const startX = width * 0.125;
-      const stepX = (width * 0.75) / points;
-
-      for (let i = 0; i <= points; i++) {
-        const freqVal = freqData[Math.floor((i / points) * freqData.length)] || 0;
-        const h = (freqVal / 255) * 90 * (Math.random() * 0.5 + 0.75);
-        const curX = startX + (i * stepX);
-        const curY = waveBaselineY - h;
-
-        if (i === 0) ctx.moveTo(curX, curY);
-        else ctx.lineTo(curX, curY);
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.15)';
+        ctx.beginPath();
+        ctx.moveTo(width / 2 + glitchOffset, 0);
+        ctx.lineTo(width / 2 + glitchOffset, height);
+        ctx.moveTo(0, height / 2);
+        ctx.lineTo(width, height / 2);
+        ctx.stroke();
       }
-      ctx.stroke();
+
+      // Dark spark frequencies
+      if (showSpectralBars) {
+        const points = 24;
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        const startX = width * 0.125;
+        const stepX = (width * 0.75) / points;
+
+        for (let i = 0; i <= points; i++) {
+          const freqVal = freqData[Math.floor((i / points) * freqData.length)] || 0;
+          const h = (freqVal / 255) * 90 * (Math.random() * 0.5 + 0.75);
+          const curX = startX + (i * stepX);
+          const curY = waveBaselineY - h;
+
+          if (i === 0) ctx.moveTo(curX, curY);
+          else ctx.lineTo(curX, curY);
+        }
+        ctx.stroke();
+      }
     } 
     else if (style === 'vibrant') {
-      // Rotating Vinyl grooves with glowing overlays
+      // Glowing ambient overlay
       const glowGrad = ctx.createRadialGradient(width / 2, albumArtY, 20, width / 2, albumArtY, albumArtSize * 1.1);
       glowGrad.addColorStop(0, 'rgba(249, 115, 22, 0.04)');
       glowGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.08)');
@@ -494,73 +787,79 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
       ctx.fillRect(0, 0, width, height);
 
       // Radial neon fire bars expanding outwards
-      const outerRad = albumArtSize * 0.65;
-      const numBars = 50;
-      ctx.save();
-      ctx.translate(width / 2, albumArtY);
-      ctx.rotate(time * 0.05);
-      
-      for (let i = 0; i < numBars; i++) {
-        const angle = (i / numBars) * Math.PI * 2;
-        const freqVal = freqData[Math.floor((i / numBars) * freqData.length)] || 0;
-        const normVal = freqVal / 255;
-        const length = 4 + normVal * 75 + Math.abs(Math.sin(time * 4.5 + i * 0.4)) * 8;
+      if (showSpectralBars) {
+        const outerRad = albumArtSize * 0.65;
+        const numBars = 50;
+        ctx.save();
+        ctx.translate(width / 2, albumArtY);
+        ctx.rotate(time * 0.05);
+        
+        for (let i = 0; i < numBars; i++) {
+          const angle = (i / numBars) * Math.PI * 2;
+          const freqVal = freqData[Math.floor((i / numBars) * freqData.length)] || 0;
+          const normVal = freqVal / 255;
+          const length = 4 + normVal * 75 + Math.abs(Math.sin(time * 4.5 + i * 0.4)) * 8;
 
-        ctx.rotate(angle);
-        const barGrad = ctx.createLinearGradient(0, outerRad, 0, outerRad + length);
-        barGrad.addColorStop(0, '#f97316');
-        barGrad.addColorStop(1, '#a855f7');
-        ctx.fillStyle = barGrad;
+          ctx.rotate(angle);
+          const barGrad = ctx.createLinearGradient(0, outerRad, 0, outerRad + length);
+          barGrad.addColorStop(0, '#f97316');
+          barGrad.addColorStop(1, '#a855f7');
+          ctx.fillStyle = barGrad;
 
-        ctx.fillRect(-1.5, outerRad, 3, length);
-        ctx.rotate(-angle);
+          ctx.fillRect(-1.5, outerRad, 3, length);
+          ctx.rotate(-angle);
+        }
+        ctx.restore();
       }
-      ctx.restore();
     } 
     else if (style === 'abstract') {
-      // Flowing bezier liquid frequencies
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.45)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let xCoord = 0; xCoord < width; xCoord += 6) {
-        const freqSample = freqData[Math.floor((xCoord / width) * freqData.length)] || 0;
-        const freqNorm = freqSample / 255;
-        const valY = waveBaselineY + Math.sin(xCoord * 0.007 + time * 1.8) * (24 + freqNorm * 54) + Math.cos(xCoord * 0.015 + time * 2.5) * 12;
-        if (xCoord === 0) ctx.moveTo(xCoord, valY);
-        else ctx.lineTo(xCoord, valY);
+      if (showSpectralBars) {
+        // Flowing bezier liquid frequencies
+        ctx.strokeStyle = 'rgba(59, 130, 246, 0.45)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let xCoord = 0; xCoord < width; xCoord += 6) {
+          const freqSample = freqData[Math.floor((xCoord / width) * freqData.length)] || 0;
+          const freqNorm = freqSample / 255;
+          const valY = waveBaselineY + Math.sin(xCoord * 0.007 + time * 1.8) * (24 + freqNorm * 54) + Math.cos(xCoord * 0.015 + time * 2.5) * 12;
+          if (xCoord === 0) ctx.moveTo(xCoord, valY);
+          else ctx.lineTo(xCoord, valY);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
 
       // Intertwining orbit rings centering on adaptive dynamic art
-      for (let rNode = 0; rNode < 3; rNode++) {
-        const expandFactor = 1.0 + rNode * 0.14 + Math.sin(time * 1.2 + rNode) * 0.06 + motionPulse * 0.08;
-        ctx.strokeStyle = `rgba(59, 130, 246, ${0.12 - rNode * 0.03})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(width / 2, albumArtY, albumArtSize * 0.65 * expandFactor, 0, Math.PI * 2);
-        ctx.stroke();
+      if (showOrbitRings) {
+        for (let rNode = 0; rNode < 3; rNode++) {
+          const expandFactor = 1.0 + rNode * 0.14 + Math.sin(time * 1.2 + rNode) * 0.06 + motionPulse * 0.08;
+          ctx.strokeStyle = `rgba(59, 130, 246, ${0.12 - rNode * 0.03})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(width / 2, albumArtY, albumArtSize * 0.65 * expandFactor, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
     }
     ctx.restore();
 
     // 4. Center image card drawing
-    if (imgElement) {
+    if (imgElement && albumArtShape !== 'hidden') {
       const artSize = albumArtSize * artScale;
       ctx.save();
       ctx.translate(width / 2, albumArtY);
 
-      if (style === 'vibrant') {
+      if (style === 'vibrant' || albumArtShape === 'circle') {
         ctx.rotate(time * 0.11);
       } else if (style === 'abstract') {
         ctx.rotate(Math.sin(time * 0.08) * 0.12);
       }
 
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
-      ctx.shadowBlur = 32;
-      ctx.shadowOffsetY = 12;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+      ctx.shadowBlur = 32 * shadowStrength;
+      ctx.shadowOffsetY = 12 * shadowStrength;
 
       ctx.beginPath();
-      if (style === 'vibrant') {
+      if (albumArtShape === 'circle') {
         ctx.arc(0, 0, artSize / 2, 0, Math.PI * 2);
       } else {
         if (ctx.roundRect) {
@@ -573,8 +872,8 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
       ctx.drawImage(imgElement, -artSize / 2, -artSize / 2, artSize, artSize);
       ctx.restore();
 
-      // Central vinyl marker for vibrant
-      if (style === 'vibrant') {
+      // Central record vinyl marker for vibrant/circular art styles
+      if (style === 'vibrant' || albumArtShape === 'circle') {
         ctx.save();
         ctx.translate(width / 2, albumArtY);
         ctx.fillStyle = '#18181b';
@@ -608,9 +907,11 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     ctx.fillText(`${artistName}`, width / 2, textBaseY + 20);
 
     // Dynamic watermarks
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.font = '900 tracking-widest 7px monospace';
-    ctx.fillText(`PROMO ENGINE v1.1 // ASPECT: ${aspect.toUpperCase()} // CC: ${ccPreset.toUpperCase()}`, width / 2, height - 20);
+    if (showWatermarks) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.font = '900 tracking-widest 7px monospace';
+      ctx.fillText(`PROMO ENGINE v1.1 // ASPECT: ${aspect.toUpperCase()} // CC: ${ccPreset.toUpperCase()}`, width / 2, height - 20);
+    }
 
     // 6. Embedded Lip Sync / Dynamic Lyric Overlay
     if (overlayLyrics && parsedLyrics && parsedLyrics.length > 0) {
@@ -635,26 +936,26 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         
         if (lyricStyle === 'retro') {
           fontName = '"Space Grotesk", sans-serif';
-          ctx.font = `900 italic ${fontSize} ${fontName}`;
+          ctx.font = `${lyricFontWeight} italic ${fontSize} ${fontName}`;
           ctx.fillStyle = lyricColor || '#f97316';
           ctx.shadowColor = lyricColor || '#f97316';
           ctx.shadowBlur = Math.round(18 * fontScaleFactor);
         } else if (lyricStyle === 'serif') {
           fontName = '"Playfair Display", serif';
-          ctx.font = `italic 700 ${fontSize} ${fontName}`;
+          ctx.font = `italic ${lyricFontWeight} ${fontSize} ${fontName}`;
           ctx.fillStyle = lyricColor || '#ffffff';
           ctx.shadowColor = 'rgba(0,0,0,0.7)';
           ctx.shadowBlur = Math.round(12 * fontScaleFactor);
           uppercase = false;
         } else if (lyricStyle === 'mono') {
           fontName = '"JetBrains Mono", monospace';
-          ctx.font = `800 ${fontSize} ${fontName}`;
+          ctx.font = `${lyricFontWeight} ${fontSize} ${fontName}`;
           ctx.fillStyle = lyricColor || '#10b981';
           ctx.shadowColor = lyricColor || '#10b981';
           ctx.shadowBlur = Math.round(14 * fontScaleFactor);
         } else {
           fontName = '"Inter", sans-serif';
-          ctx.font = `900 ${fontSize} ${fontName}`;
+          ctx.font = `${lyricFontWeight} ${fontSize} ${fontName}`;
           ctx.fillStyle = lyricColor || '#ffffff';
           ctx.shadowColor = 'rgba(0,0,0,0.9)';
           ctx.shadowBlur = Math.round(15 * fontScaleFactor);
@@ -664,24 +965,122 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = Math.max(3, Math.round(8 * fontScaleFactor));
         
-        const displayText = uppercase ? activeLine.text.toUpperCase() : activeLine.text;
+        let displayText = uppercase ? activeLine.text.toUpperCase() : activeLine.text;
+        
+        let scaleEffect = 1.0;
+        let opacity = 1.0;
+        let translateY = 0;
+        const timeDelta = time - activeLine.time;
+        let drawTextLines: string[] = [];
+
+        // Dynamic formatting transitions
+        if (lyricFormat === 'word') {
+          const rawWords = activeLine.text.split(/\s+/).filter(Boolean);
+          if (rawWords.length > 0) {
+            let lineDuration = 4.0;
+            const activeIndex = parsedLyrics.indexOf(activeLine);
+            if (activeIndex !== -1 && activeIndex < parsedLyrics.length - 1) {
+              lineDuration = Math.max(1.0, parsedLyrics[activeIndex + 1].time - activeLine.time);
+            }
+            
+            // Highlight active word
+            const wordRatio = Math.min(0.99, timeDelta / lineDuration);
+            const wordIndex = Math.min(rawWords.length - 1, Math.floor(wordRatio * rawWords.length));
+            const activeWord = uppercase ? rawWords[wordIndex].toUpperCase() : rawWords[wordIndex];
+            
+            // Pop transition for individual flashing word
+            const wordDuration = lineDuration / rawWords.length;
+            const wordTimeDelta = timeDelta % wordDuration;
+            const t = Math.min(1.0, wordTimeDelta / Math.min(0.18, wordDuration));
+            scaleEffect = 0.85 + Math.sin(t * Math.PI * 0.5) * 0.22;
+            opacity = 1.0;
+            drawTextLines = [activeWord];
+          } else {
+            drawTextLines = [''];
+          }
+        } else {
+          // Bounded multi-line wrapping layer to prevent closed captions from bleeding off-canvas
+          const maxWidth = width * 0.82;
+          const words = displayText.split(' ');
+          let currentLine = '';
+
+          for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            const testLine = currentLine ? currentLine + ' ' + word : word;
+            const testWidth = ctx.measureText(testLine).width;
+            if (testWidth > maxWidth && i > 0) {
+              drawTextLines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine = testLine;
+            }
+          }
+          if (currentLine) {
+            drawTextLines.push(currentLine);
+          }
+
+          if (lyricFormat === 'slide') {
+            const slideDuration = 0.45;
+            if (timeDelta < slideDuration) {
+              const t = timeDelta / slideDuration;
+              const ease = 1 - Math.pow(1 - t, 3); // Cubic ease out
+              translateY = (1 - ease) * (fontSizePx * 1.0);
+              opacity = Math.min(1.0, t * 1.5);
+            } else {
+              translateY = 0;
+              opacity = 1.0;
+            }
+            scaleEffect = 1.0;
+          } else if (lyricFormat === 'fade') {
+            const fadeDuration = 0.35;
+            if (timeDelta < fadeDuration) {
+              opacity = timeDelta / fadeDuration;
+            } else {
+              opacity = 1.0;
+            }
+            scaleEffect = 1.0;
+          } else if (lyricFormat === 'zoom') {
+            const zoomDuration = 0.5;
+            if (timeDelta < zoomDuration) {
+              const t = timeDelta / zoomDuration;
+              scaleEffect = 1.35 - t * 0.35;
+              opacity = t;
+            } else {
+              const drift = timeDelta - zoomDuration;
+              scaleEffect = 1.0 + Math.min(0.04, drift * 0.003);
+              opacity = 1.0;
+            }
+          } else {
+            // Default: 'bounce' Style
+            const bounceDuration = 0.5;
+            if (timeDelta < bounceDuration) {
+              const t = timeDelta / bounceDuration;
+              scaleEffect = 0.70 + Math.sin(t * Math.PI * 1.4) * 0.35 * (1 - t);
+              opacity = Math.min(1.0, t * 1.5);
+            } else {
+              scaleEffect = 1.0;
+              opacity = 1.0;
+            }
+          }
+        }
+
         // Place text in precise dynamic quadrant
         const lyricY = aspect === 'vertical' ? height * 0.58 : height * 0.60;
         
-        const timeDelta = time - activeLine.time;
-        let scaleEffect = 1.0;
-        let opacity = 1.0;
-        
-        if (timeDelta < 0.4) {
-          scaleEffect = 0.9 + (timeDelta / 0.4) * 0.1;
-          opacity = timeDelta / 0.4;
+        ctx.globalAlpha = opacity;
+        ctx.translate(width / 2, lyricY + translateY);
+        ctx.scale(scaleEffect, scaleEffect);
+
+        const lineHeight = fontSizePx * lyricLineHeight; // Comfortable leading for multi-line subtitles
+        const totalHeight = (drawTextLines.length - 1) * lineHeight;
+        const startY = -totalHeight / 2; // Harmonious balance: center lines on the target vertical coordinate
+
+        for (let i = 0; i < drawTextLines.length; i++) {
+          const lineY = startY + i * lineHeight;
+          ctx.strokeText(drawTextLines[i], 0, lineY);
+          ctx.fillText(drawTextLines[i], 0, lineY);
         }
         
-        ctx.globalAlpha = opacity;
-        ctx.translate(width / 2, lyricY);
-        ctx.scale(scaleEffect, scaleEffect);
-        ctx.strokeText(displayText, 0, 0);
-        ctx.fillText(displayText, 0, 0);
         ctx.restore();
       }
     }
@@ -967,7 +1366,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         playbackSecs,
         clipEnabled ? (clipEnd - clipStart) : totalDur,
         style,
-        aspectRatio,
+        resolvedAspectRatio,
         freqs,
         coverImg
       );
@@ -1011,49 +1410,83 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
 
   useEffect(() => {
     startPreviewLoop();
-  }, [style, aspectRatio, isPlayingPreview]);
+  }, [style, resolvedAspectRatio, isPlayingPreview]);
 
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
-    if (!generatedVideo?.video_url) return;
+    if (!generatedVideo) return;
     setIsExporting(true);
 
     try {
-      // Small delay to simulate prep
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Small progress Toast to reassure the user
+      addToast("Preparing premium high-fidelity file transfer...", "info");
       
-      const videoUrl = generatedVideo.video_url;
-      const response = await fetch(videoUrl);
-      const blob = await response.blob();
+      // Small delay to simulate file prep and assembly packaging
+      await new Promise(resolve => setTimeout(resolve, 850));
       
-      const url = window.URL.createObjectURL(blob);
+      // 1. Primary Local Retrieval: Use raw in-memory Blob directly if present.
+      // This completely bypasses network fetching, CORS, and cross-origin sandboxed iframe errors!
+      let blob = generatedVideo.video_data;
       
-      const a = document.createElement('a');
-      a.href = url;
-      // Determine extension based on blob type
-      const isMp4 = blob.type.toLowerCase().includes('mp4');
-      const extension = isMp4 ? 'mp4' : 'webm';
-      const fileName = `${name.replace(/\s+/g, '_')}_Master_Promo.${extension}`;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      
-      // Cleanup
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        setIsExporting(false);
-      }, 100);
-    } catch (error) {
+      // 2. Secondary Fallback: Fetch only if the raw blob is missing but we have a valid video_url
+      if (!blob && generatedVideo.video_url) {
+        try {
+          const response = await fetch(generatedVideo.video_url);
+          blob = await response.blob();
+        } catch (fetchErr) {
+          console.warn("Could not fetch video Blob from URL directly:", fetchErr);
+        }
+      }
+
+      if (blob) {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const isMp4 = blob.type.toLowerCase().includes('mp4');
+        const extension = isMp4 ? 'mp4' : 'webm';
+        const fileName = `${name.replace(/\s+/g, '_')}_Master_Promo.${extension}`;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          try {
+            document.body.removeChild(a);
+          } catch (remErr) {}
+          setIsExporting(false);
+          addToast("Master Promo Video exported successfully!", "success");
+        }, 150);
+        return;
+      }
+
+      // 3. Last-resort fallback: Direct Anchor URL Click download
+      if (generatedVideo.video_url) {
+        const a = document.createElement('a');
+        a.href = generatedVideo.video_url;
+        a.target = "_blank";
+        a.download = `${name.replace(/\s+/g, '_')}_Promo.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(a);
+          } catch (e) {}
+          setIsExporting(false);
+        }, 150);
+      } else {
+        throw new Error("No video URL or video binary found to export.");
+      }
+    } catch (error: any) {
       console.error('Export failed:', error);
       setIsExporting(false);
+      addToast("Failed to auto-download. Click 'Open in New Tab' above to download without restrictions.", "error");
       
-      // Fallback to direct download
-      const a = document.createElement('a');
-      a.href = generatedVideo.video_url;
-      a.download = `${name.replace(/\s+/g, '_')}_Promo.mp4`;
-      a.click();
+      // Open in new window if possible as absolute emergency fallback
+      if (generatedVideo?.video_url) {
+        window.open(generatedVideo.video_url, '_blank');
+      }
     }
   };
 
@@ -1092,10 +1525,10 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
       if (!ctx) throw new Error('Could not create canvas context');
       
       // Dynamic Sizing based on Aspect Ratio
-      if (aspectRatio === 'vertical') {
+      if (resolvedAspectRatio === 'vertical') {
         canvas.width = 720;
         canvas.height = 1280;
-      } else if (aspectRatio === 'square') {
+      } else if (resolvedAspectRatio === 'square') {
         canvas.width = 1080;
         canvas.height = 1080;
       } else {
@@ -1209,8 +1642,10 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
           const finalMime = mediaRecorder.mimeType || 'video/webm';
           const blob = new Blob(chunks, { type: finalMime }); 
           const videoUrl = URL.createObjectURL(blob);
+          const generatedId = uuidv4();
           
           const newVideo: Partial<PromoVideo> = {
+            id: generatedId,
             track_id: activeTrack?.id,
             playlist_id: playlist?.id,
             video_url: videoUrl,
@@ -1223,7 +1658,6 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
           
           await addPromoVideo(newVideo);
           setGeneratedVideo({
-            id: Math.random().toString(),
             ...newVideo,
             created_at: new Date().toISOString()
           } as PromoVideo);
@@ -1269,7 +1703,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
             timelineSecs,
             clipEnabled ? (clipEnd - clipStart) : finalDuration,
             style,
-            aspectRatio,
+            resolvedAspectRatio,
             mockFreqs,
             img
           );
@@ -1360,17 +1794,17 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                   <div className="flex-1 flex items-center justify-center p-4 min-h-[280px]">
                     <div 
                       className={`relative overflow-hidden rounded-2xl bg-black border border-zinc-900 shadow-xl flex items-center justify-center transition-all duration-300 ${
-                        aspectRatio === 'vertical' 
+                        resolvedAspectRatio === 'vertical' 
                         ? 'h-[280px] aspect-[9/16]' 
-                        : aspectRatio === 'square' 
+                        : resolvedAspectRatio === 'square' 
                         ? 'h-[240px] aspect-square' 
                         : 'w-[320px] aspect-video'
                       }`}
                     >
                       <canvas 
                         ref={canvasRef} 
-                        width={aspectRatio === 'vertical' ? 360 : aspectRatio === 'square' ? 400 : 480}
-                        height={aspectRatio === 'vertical' ? 640 : aspectRatio === 'square' ? 400 : 270}
+                        width={resolvedAspectRatio === 'vertical' ? 360 : resolvedAspectRatio === 'square' ? 400 : 480}
+                        height={resolvedAspectRatio === 'vertical' ? 640 : resolvedAspectRatio === 'square' ? 400 : 270}
                         className="w-full h-full object-cover rounded-xl"
                       />
                     </div>
@@ -1460,8 +1894,9 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                         {/* 1. Aspect Ratios Selection */}
                         <div className="space-y-3">
                           <label className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Select Dimensions</label>
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-4 gap-2">
                             {[
+                              { id: 'auto', name: 'Auto Fit', ratio: 'Match Art', icon: '🎯' },
                               { id: 'vertical', name: 'Vertical', ratio: '9:16', icon: '📱' },
                               { id: 'square', name: 'Square', ratio: '1:1', icon: '🟦' },
                               { id: 'horizontal', name: 'Wide', ratio: '16:9', icon: '📺' }
@@ -1470,16 +1905,16 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                                 key={r.id}
                                 type="button"
                                 onClick={() => setAspectRatio(r.id as any)}
-                                className={`p-3 rounded-2xl border transition-all flex flex-col items-center gap-1.5 ${
+                                className={`p-2 rounded-2xl border transition-all flex flex-col items-center gap-1.5 ${
                                   aspectRatio === r.id 
                                   ? 'bg-orange-500/10 border-orange-500 text-orange-500 shadow-lg shadow-orange-500/5' 
                                   : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:border-zinc-800'
                                 }`}
                               >
-                                <span className="text-lg">{r.icon}</span>
+                                <span className="text-base">{r.icon}</span>
                                 <div className="text-center">
-                                  <div className="text-[9px] font-black uppercase tracking-wider">{r.name}</div>
-                                  <div className="text-[7px] font-bold opacity-60 font-mono">{r.ratio}</div>
+                                  <div className="text-[8px] font-black uppercase tracking-wider">{r.name}</div>
+                                  <div className="text-[6px] font-bold opacity-60 font-mono">{r.ratio}</div>
                                 </div>
                               </button>
                             ))}
@@ -1707,6 +2142,153 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                               className="w-full accent-orange-500 bg-zinc-800 h-1 rounded-lg cursor-pointer"
                             />
                           </div>
+
+                          <div className="border-t border-zinc-800/60 my-2 pt-2" />
+
+                          {/* PRO TEMPLATE OVERRIDES PANEL */}
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Pro Template Tweaks & Clutter Stripping</span>
+                              <span className="text-[7px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono font-black uppercase">FULL ACCESS</span>
+                            </div>
+
+                            {/* Toggles Grid */}
+                            <div className="grid grid-cols-2 gap-2 text-[8px]">
+                              {/* Pure Cover Fit (No Effects) Toggle */}
+                              <div className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/40 border border-zinc-900 col-span-2">
+                                <div className="space-y-0.5">
+                                  <span className="font-black text-orange-500 uppercase tracking-wider block">Pure Cover Fit (No Effects)</span>
+                                  <span className="text-zinc-600 block">Fills the video ratio block with just the artwork background and overlays dynamic closed captions purely</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setPureCoverFit(!pureCoverFit)}
+                                  className={`w-7 h-4 rounded-full transition-all relative ${pureCoverFit ? 'bg-orange-500' : 'bg-zinc-800'}`}
+                                >
+                                  <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${pureCoverFit ? 'right-0.5' : 'left-0.5'}`} />
+                                </button>
+                              </div>
+
+                              {/* Background Blur Toggle */}
+                              <div className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/40 border border-zinc-900">
+                                <div className="space-y-0.5">
+                                  <span className="font-black text-zinc-300 uppercase tracking-wider block">Backdrop Blur</span>
+                                  <span className="text-zinc-600 block">Atmospheric depth</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowBgBlur(!showBgBlur)}
+                                  className={`w-7 h-4 rounded-full transition-all relative ${showBgBlur ? 'bg-orange-500' : 'bg-zinc-800'}`}
+                                >
+                                  <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${showBgBlur ? 'right-0.5' : 'left-0.5'}`} />
+                                </button>
+                              </div>
+
+                              {/* Tech Orbit Rings Toggle */}
+                              <div className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/40 border border-zinc-900">
+                                <div className="space-y-0.5">
+                                  <span className="font-black text-zinc-300 uppercase tracking-wider block">Orbit Rings</span>
+                                  <span className="text-zinc-600 block">Generic rings</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowOrbitRings(!showOrbitRings)}
+                                  className={`w-7 h-4 rounded-full transition-all relative ${showOrbitRings ? 'bg-orange-500' : 'bg-zinc-800'}`}
+                                >
+                                  <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${showOrbitRings ? 'right-0.5' : 'left-0.5'}`} />
+                                </button>
+                              </div>
+
+                              {/* Spectrum Waveform Bars Toggle */}
+                              <div className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/40 border border-zinc-900">
+                                <div className="space-y-0.5">
+                                  <span className="font-black text-zinc-300 uppercase tracking-wider block">Spectrum Bars</span>
+                                  <span className="text-zinc-600 block">Rhythmic baseline</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowSpectralBars(!showSpectralBars)}
+                                  className={`w-7 h-4 rounded-full transition-all relative ${showSpectralBars ? 'bg-orange-500' : 'bg-zinc-800'}`}
+                                >
+                                  <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${showSpectralBars ? 'right-0.5' : 'left-0.5'}`} />
+                                </button>
+                              </div>
+
+                              {/* Watermark/HUD Logs Toggle */}
+                              <div className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/40 border border-zinc-900">
+                                <div className="space-y-0.5">
+                                  <span className="font-black text-zinc-300 uppercase tracking-wider block">Bottom HUD Text</span>
+                                  <span className="text-zinc-600 block">Technical watermark</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowWatermarks(!showWatermarks)}
+                                  className={`w-7 h-4 rounded-full transition-all relative ${showWatermarks ? 'bg-orange-500' : 'bg-zinc-800'}`}
+                                >
+                                  <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${showWatermarks ? 'right-0.5' : 'left-0.5'}`} />
+                                </button>
+                              </div>
+
+                              {/* Alignment Grid Overlay */}
+                              <div className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/40 border border-zinc-900 col-span-2">
+                                <div className="space-y-0.5">
+                                  <span className="font-black text-zinc-300 uppercase tracking-wider block">Micro alignments grid layout</span>
+                                  <span className="text-zinc-600 block">Draws delicate design measurement grids across canvas</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowGridOverlay(!showGridOverlay)}
+                                  className={`w-7 h-4 rounded-full transition-all relative ${showGridOverlay ? 'bg-orange-500' : 'bg-zinc-800'}`}
+                                >
+                                  <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${showGridOverlay ? 'right-0.5' : 'left-0.5'}`} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Album Art Placement Control */}
+                            <div className="space-y-2">
+                              <span className="text-[8px] font-black uppercase tracking-wider text-zinc-400 block">Album Art Presenter Shape</span>
+                              <div className="grid grid-cols-3 gap-1 px-1 py-1 rounded-xl bg-zinc-950/60 border border-zinc-900 text-[8px] font-bold text-center">
+                                {[
+                                  { id: 'square', label: 'Premium Square' },
+                                  { id: 'circle', label: 'Retro Vinyl Circle' },
+                                  { id: 'hidden', label: 'None (Typography Focus)' }
+                                ].map(opt => (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => setAlbumArtShape(opt.id as any)}
+                                    className={`py-1.5 rounded-lg transition-all cursor-pointer ${
+                                      albumArtShape === opt.id 
+                                      ? 'bg-orange-500/15 border border-orange-500/20 text-orange-400' 
+                                      : 'text-zinc-500 hover:text-zinc-300'
+                                    }`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Shadow/Glow Multiplier */}
+                            {albumArtShape !== 'hidden' && (
+                              <div className="space-y-1.5 bg-zinc-950/40 p-2.5 rounded-xl border border-zinc-900/40">
+                                <div className="flex justify-between text-[8px] font-black uppercase tracking-wider text-zinc-400">
+                                  <span>Cover Art Glow & shadow depth</span>
+                                  <span className="font-mono text-orange-500">{(shadowStrength * 100).toFixed(0)}%</span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min="0.0"
+                                  max="1.5"
+                                  step="0.1"
+                                  value={shadowStrength}
+                                  onChange={(e) => setShadowStrength(parseFloat(e.target.value))}
+                                  className="w-full accent-orange-500 bg-zinc-850 h-1 rounded cursor-pointer"
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1728,7 +2310,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                         </div>
 
                         {overlayLyrics && (
-                          <div className="space-y-4">
+                          <div className="caption-element space-y-4">
                             {/* Stylistic selector */}
                             <div className="space-y-2">
                               <label className="text-[8px] font-black uppercase tracking-[0.2em] text-zinc-500 block">Typography Font Vibe</label>
@@ -1791,6 +2373,82 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                               <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest leading-normal">
                                 Auto-scaling: Adjusts dynamically to maintain proportion on final renders
                               </p>
+                            </div>
+
+                            {/* Caption Line Height Slider */}
+                            <div className="bg-zinc-900/20 p-3 border border-zinc-900 rounded-xl space-y-2">
+                              <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">
+                                <span>Line Height Leading</span>
+                                <span className="font-mono text-orange-500 font-bold">{lyricLineHeight.toFixed(2)}x</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={1.0}
+                                max={2.2}
+                                step={0.05}
+                                value={lyricLineHeight}
+                                onChange={(e) => setLyricLineHeight(Number(e.target.value))}
+                                className="w-full accent-orange-500 bg-zinc-950 h-1 rounded-lg outline-none cursor-pointer"
+                              />
+                              <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest leading-normal">
+                                Controls subtitle/lyric vertical spacing for multi-line wrapping
+                              </p>
+                            </div>
+
+                            {/* Caption Font Weight Selector */}
+                            <div className="bg-zinc-900/20 p-3 border border-zinc-900 rounded-xl space-y-2">
+                              <label className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400 block pb-1">Font Weight</label>
+                              <div className="grid grid-cols-4 gap-1.5 font-sans">
+                                {[
+                                  { id: '300', label: 'Light' },
+                                  { id: '400', label: 'Regular' },
+                                  { id: '500', label: 'Medium' },
+                                  { id: '600', label: 'Semi' },
+                                  { id: '700', label: 'Bold' },
+                                  { id: '800', label: 'Extra' },
+                                  { id: '900', label: 'Black' }
+                                ].map((w) => (
+                                  <button
+                                    key={w.id}
+                                    type="button"
+                                    onClick={() => setLyricFontWeight(w.id)}
+                                    className={`py-1.5 px-1 rounded-xl text-[8px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                                      lyricFontWeight === w.id
+                                        ? 'bg-orange-500/10 border-orange-500 text-orange-500'
+                                        : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:border-zinc-800 hover:text-zinc-300'
+                                    }`}
+                                  >
+                                    {w.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Caption Animation Format selection option */}
+                            <div className="space-y-2">
+                              <label className="text-[8px] font-black uppercase tracking-[0.2em] text-zinc-500 block">Caption Style Format</label>
+                              <div className="grid grid-cols-5 gap-1.5 font-sans">
+                                {[
+                                  { id: 'bounce', label: 'Bounce' },
+                                  { id: 'slide', label: 'Slide' },
+                                  { id: 'fade', label: 'Fade' },
+                                  { id: 'zoom', label: 'Zoom' },
+                                  { id: 'word', label: '1 Word' }
+                                ].map(format => (
+                                  <button
+                                    key={format.id}
+                                    type="button"
+                                    onClick={() => setLyricFormat(format.id as any)}
+                                    className={`py-2 px-1 rounded-xl text-[8px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                                      lyricFormat === format.id
+                                      ? 'bg-orange-500/10 border-orange-500 text-orange-500'
+                                      : 'bg-zinc-900/40 border-zinc-900 text-zinc-500 hover:border-zinc-800 hover:text-zinc-300'
+                                    }`}
+                                  >
+                                    {format.label}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
 
                             {/* Lyrics workspace console */}

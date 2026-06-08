@@ -40,6 +40,7 @@ export default function VideoPreviewModal({ video, onClose }: VideoPreviewModalP
   const [socialPlatform, setSocialPlatform] = useState<'youtube' | 'instagram'>('youtube');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [promoData, setPromoData] = useState<any>(null);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   useEffect(() => {
     async function loadPromoData() {
@@ -252,17 +253,41 @@ export default function VideoPreviewModal({ video, onClose }: VideoPreviewModalP
                   >
                     <Share2 className="w-4 h-4 text-black" /> Share to YouTube / IG
                   </button>
-                  <button 
-                    onClick={() => {
-                      if(confirm("DANGER: This will delete the generated asset. Proceed?")) {
-                        deletePromoVideo(video.id);
-                        onClose();
-                      }
-                    }}
-                    className="w-full py-3 text-zinc-600 hover:text-rose-500 text-[9px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" /> Destroy Asset
-                  </button>
+                  {isConfirmingDelete ? (
+                    <div className="w-full bg-rose-950/20 border border-rose-500/25 p-4 rounded-2xl space-y-3 antialiased">
+                      <div className="flex items-start gap-2.5">
+                        <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5 animate-pulse" />
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-200">Confirm Destruction?</p>
+                          <p className="text-[8px] text-rose-400 uppercase tracking-widest mt-0.5">This will permanently purge this rendering from the database & local caches.</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            deletePromoVideo(video.id);
+                            onClose();
+                          }}
+                          className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-black text-[9px] font-black uppercase tracking-widest rounded-xl transition-colors cursor-pointer active:scale-95"
+                        >
+                          Yes, Purge File
+                        </button>
+                        <button
+                          onClick={() => setIsConfirmingDelete(false)}
+                          className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-[9px] font-black uppercase tracking-widest rounded-xl transition-colors cursor-pointer active:scale-95"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => setIsConfirmingDelete(true)}
+                      className="w-full py-3 text-zinc-600 hover:text-rose-500 text-[9px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" /> Destroy Asset
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ) : (

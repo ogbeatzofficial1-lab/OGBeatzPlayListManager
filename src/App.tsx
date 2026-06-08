@@ -127,6 +127,7 @@ export default function App() {
       (localStorage.getItem("ogbeatz-theme") as "dark" | "light") || "dark"
     );
   });
+  const [chartTimeframe, setChartTimeframe] = useState<"7d" | "30d">("7d");
 
   useEffect(() => {
     localStorage.setItem("ogbeatz-theme", theme);
@@ -177,6 +178,7 @@ export default function App() {
   const [selectedVideoForPreview, setSelectedVideoForPreview] = useState<
     any | null
   >(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showUploadVideo, setShowUploadVideo] = useState(false);
   const [shareToken, setShareToken] = useState<string | null>(null);
@@ -361,6 +363,7 @@ export default function App() {
     shareLinks,
     promoVideos,
     deleteTrack,
+    deletePromoVideo,
     updateTrack,
     addPlaylist,
     updatePlaylist,
@@ -482,38 +485,49 @@ export default function App() {
 
   const chartData = useMemo(() => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    // Generate the last 7 days of the week dynamically ending today
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const limitDays = chartTimeframe === "30d" ? 30 : 7;
+
+    // Generate the last N days dynamically ending today
+    const rangeDays = Array.from({ length: limitDays }, (_, i) => {
       const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
+      d.setDate(d.getDate() - ((limitDays - 1) - i));
+
+      let nameStr = "";
+      if (limitDays === 7) {
+        nameStr = days[d.getDay()];
+      } else {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        nameStr = `${months[d.getMonth()]} ${String(d.getDate()).padStart(2, "0")}`;
+      }
+
       return {
-        name: days[d.getDay()],
+        name: nameStr,
         dateStr: d.toDateString(),
         plays: 0,
         engagement: 0,
       };
     });
 
-    // Populate data dynamically from active SQL logs
+    // Populate data dynamically from active logs
     activities.forEach((act) => {
       if (!act.timestamp) return;
       const actDateStr = new Date(act.timestamp).toDateString();
-      const match = last7Days.find((day) => day.dateStr === actDateStr);
+      const match = rangeDays.find((day) => day.dateStr === actDateStr);
       if (match) {
         if (act.type === "play") {
           match.plays += 1;
-        } else if (["download", "share", "social"].includes(act.type)) {
+        } else if (["download", "share", "social", "message", "upload"].includes(act.type)) {
           match.engagement += 1;
         }
       }
     });
 
-    return last7Days.map(({ name, plays, engagement }) => ({
+    return rangeDays.map(({ name, plays, engagement }) => ({
       name,
       plays,
       engagement,
     }));
-  }, [activities]);
+  }, [activities, chartTimeframe]);
 
   const filteredClients = useMemo(() => {
     return clients.filter(
@@ -962,6 +976,46 @@ export default function App() {
                       {video.style}
                     </div>
                   </div>
+
+                  {/* Quick Delete Overlay Button & Confirmation Portal */}
+                  {confirmDeleteId === video.id ? (
+                    <div 
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute inset-0 z-30 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center select-none"
+                    >
+                      <AlertCircle className="w-8 h-8 text-rose-500 mb-2 animate-pulse" />
+                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Destroy Video Asset?</p>
+                      <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-1 mx-2">This action is irreversible and purges all records permanently.</p>
+                      <div className="flex items-center gap-2 mt-4 w-full px-2">
+                        <button
+                          onClick={() => {
+                            deletePromoVideo(video.id);
+                            setConfirmDeleteId(null);
+                          }}
+                          className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-black rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-md shadow-rose-600/10"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-zinc-300 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer"
+                        >
+                          No
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmDeleteId(video.id);
+                      }}
+                      className="absolute top-4 right-4 z-20 p-2.5 bg-black/60 backdrop-blur-md border border-white/10 text-zinc-400 hover:text-rose-500 hover:bg-rose-950/40 rounded-full opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-lg active:scale-90"
+                      title="Destroy Promo Video"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="p-6">
@@ -1186,10 +1240,25 @@ export default function App() {
               <p className="text-zinc-500 text-xs font-black uppercase tracking-widest mt-1">
                 Play trends vs Engagement metrics
               </p>
+              {/* Simple Custom Legend */}
+              <div className="flex items-center gap-4 mt-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Plays</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">Engagement</span>
+                </div>
+              </div>
             </div>
-            <select className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none">
-              <option>Last 7 Days</option>
-              <option>Last 30 Days</option>
+            <select
+              value={chartTimeframe}
+              onChange={(e) => setChartTimeframe(e.target.value as "7d" | "30d")}
+              className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none text-orange-500 cursor-pointer"
+            >
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
             </select>
           </div>
 
@@ -1203,6 +1272,10 @@ export default function App() {
                   <linearGradient id="colorPlays" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
                     <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorEngagement" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
@@ -1233,15 +1306,31 @@ export default function App() {
                     fontWeight: 900,
                     textTransform: "uppercase",
                   }}
-                  labelStyle={{ display: "none" }}
+                  labelStyle={{
+                    fontSize: "10px",
+                    fontWeight: 900,
+                    color: "#a1a1aa",
+                    textTransform: "uppercase",
+                    marginBottom: "4px",
+                  }}
                 />
                 <Area
                   type="monotone"
                   dataKey="plays"
+                  name="Plays"
                   stroke="#f97316"
                   strokeWidth={3}
                   fillOpacity={1}
                   fill="url(#colorPlays)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="engagement"
+                  name="Engagement"
+                  stroke="#10b981"
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#colorEngagement)"
                 />
               </AreaChart>
             </ResponsiveContainer>

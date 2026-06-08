@@ -1691,13 +1691,20 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     }
 
     if (supabase) {
-      const { error } = await supabase.from('promo_videos').delete().eq('id', id);
-      if (error) {
-        console.error(error);
-        addToast(`Failed to purge promo video from database: ${error.message}`, 'error');
+      const isUuidValid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isUuidValid) {
+        const { error } = await supabase.from('promo_videos').delete().eq('id', id);
+        if (error) {
+          console.error(error);
+          addToast(`Failed to purge promo video from database: ${error.message}`, 'error');
+        } else {
+          addToast("Promo video purged from database!", 'success');
+        }
       } else {
-        addToast("Promo video purged from database!", 'success');
+        addToast("Promo video asset successfully destroyed!", 'success');
       }
+    } else {
+      addToast("Promo video asset successfully destroyed!", 'success');
     }
   };
 

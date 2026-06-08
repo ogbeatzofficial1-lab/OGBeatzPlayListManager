@@ -831,9 +831,9 @@ We need three core formats and an advanced music metadata analysis:
       return;
     }
 
-    // Direct match first to ensure perfect transcription and zero mistakes
+    // Direct match template lookup ONLY when no raw audio binary is attached, ensuring direct speech-to-text works flawlessly
     const perfectLyricsResult = getPerfectLyricsForTrack(trackInfo.name || "");
-    if (perfectLyricsResult) {
+    if (!audioData && perfectLyricsResult) {
       console.log(`[Lyrics Interceptor] Flawless verbatim template found for "${trackInfo.name}". Returning instantly.`);
       res.json(perfectLyricsResult);
       return;
