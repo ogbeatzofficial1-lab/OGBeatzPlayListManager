@@ -378,7 +378,7 @@ export default function ClientPortal({ client }: { client: Client }) {
     setTimeout(() => {
       setZipPackingStage('zipping');
       setZipPackingProgress(35);
-      setZipPackingStatusText("Allocating tracking stems forTokyo Chill...");
+      setZipPackingStatusText(`Allocating tracking stems for "${activeTrack?.name || 'this track'}"...`);
     }, 1200);
 
     setTimeout(() => {

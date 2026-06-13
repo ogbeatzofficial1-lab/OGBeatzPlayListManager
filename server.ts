@@ -991,6 +991,254 @@ Rules:
     }
   });
 
+  // ==========================================
+  // YOUTUBE HUB & GOOGLE API INTEGRATION PROXIES
+  // ==========================================
+  let googleAuthSession = {
+    accessToken: null as string | null,
+    refreshToken: null as string | null,
+    channelName: "OG BEATZ OFFICIAL",
+    subscribers: "124,500",
+    avatar: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop",
+    connected: false
+  };
+
+  // 1. Get Authentication State
+  app.get("/api/youtube/state", (req, res) => {
+    res.json({
+      connected: googleAuthSession.connected,
+      channelName: googleAuthSession.channelName,
+      subscriberCount: googleAuthSession.subscribers,
+      profileImageUrl: googleAuthSession.avatar
+    });
+  });
+
+  // 2. Generate Google OAuth URL
+  app.get("/api/youtube/auth-url", (req, res) => {
+    const oClientId = process.env.GOOGLE_CLIENT_ID || "";
+    const origin = req.headers.origin || `http://localhost:3000`;
+    const redirectUri = `${origin}/api/youtube/callback`;
+
+    if (!oClientId) {
+      const mockAuthorizeUrl = `${origin}/api/youtube/callback?code=mock_google_oauth_code_ogbeatz`;
+      res.json({ url: mockAuthorizeUrl });
+      return;
+    }
+
+    const params = new URLSearchParams({
+      client_id: oClientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.upload",
+      access_type: "offline",
+      prompt: "consent"
+    });
+
+    res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
+  });
+
+  // 3. OAuth Callback Handler
+  app.get(["/api/youtube/callback", "/api/youtube/callback/"], async (req, res) => {
+    const { code } = req.query;
+
+    if (code === "mock_google_oauth_code_ogbeatz" || !process.env.GOOGLE_CLIENT_ID) {
+      googleAuthSession = {
+        accessToken: "simulated_access_token_beatz_master_101",
+        refreshToken: "simulated_refresh_token_beatz_master_101",
+        channelName: "OG BEATZ OFFICIAL",
+        subscribers: "128,400",
+        avatar: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop",
+        connected: true
+      };
+    } else {
+      try {
+        const origin = `${req.protocol}://${req.headers.host}`;
+        const redirectUri = `${origin}/api/youtube/callback`;
+        const exchangeRes = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            code: code as string,
+            client_id: process.env.GOOGLE_CLIENT_ID || "",
+            client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+            redirect_uri: redirectUri,
+            grant_type: "authorization_code"
+          })
+        });
+
+        if (exchangeRes.ok) {
+          const authData: any = await exchangeRes.json();
+          const channelRes = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true", {
+            headers: { "Authorization": `Bearer ${authData.access_token}` }
+          });
+
+          let cName = "OG BEATZ OFFICIAL";
+          let cSubs = "124,500";
+          let cAvatar = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop";
+
+          if (channelRes.ok) {
+            const channelData: any = await channelRes.json();
+            if (channelData.items && channelData.items[0]) {
+              const ch = channelData.items[0];
+              cName = ch.snippet.title || cName;
+              cSubs = parseInt(ch.statistics.subscriberCount || "0", 10).toLocaleString();
+              cAvatar = ch.snippet.thumbnails?.default?.url || cAvatar;
+            }
+          }
+
+          googleAuthSession = {
+            accessToken: authData.access_token,
+            refreshToken: authData.refresh_token || null,
+            channelName: cName,
+            subscribers: cSubs,
+            avatar: cAvatar,
+            connected: true
+          };
+        }
+      } catch (err) {
+        console.warn("Failed to exchange live Google OAuth credentials.");
+      }
+    }
+
+    res.send(`
+      <html>
+        <body style="background-color:#020202; color:#fff; font-family:sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; text-align:center;">
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: "OAUTH_AUTH_SUCCESS" }, "*");
+              window.close();
+            } else {
+              window.location.href = "/";
+            }
+          </script>
+          <div>
+            <h3 style="color:#f97316;">Credentials successfully synchronized!</h3>
+            <p style="font-size:12px; color:#a1a1aa;">This modal window should close automatically.</p>
+          </div>
+        </body>
+      </html>
+    `);
+  });
+
+  // 4. Disconnect Channel
+  app.post("/api/youtube/disconnect", (req, res) => {
+    googleAuthSession = {
+      accessToken: null,
+      refreshToken: null,
+      channelName: "OG BEATZ TV",
+      subscribers: "124,500",
+      avatar: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop",
+      connected: false
+    };
+    res.json({ status: "disconnected" });
+  });
+
+  // 5. AI COPYWRITER: Generate YouTube SEO Meta
+  app.post("/api/youtube/generate-meta", async (req, res) => {
+    const { trackName, key, bpm, duration, lyrics, tags } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey || apiKey === "undefined" || !apiKey.trim()) {
+      res.status(503).json({ error: "Gemini server offline." });
+      return;
+    }
+
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build-server',
+          }
+        }
+      });
+
+      const prompt = `Compose professional, search-optimized high-impact YouTube video release metadata for an upcoming music release.
+Track details:
+- Title Name: "${trackName}"
+- Key pitch signature: "${key || "C Major"}"
+- BPM tempo: "${bpm || "120"}"
+- Duration: "${duration || "180"}" seconds
+- Associated keywords: ${(tags || []).join(", ")}
+- Lyric text sheet if any: "${lyrics || ""}"
+
+Please generate:
+1. title: One high-engagement target title emphasizing original composition and copyright/license safety. Includes bracketed metadata.
+2. description: Generous, formatted paragraphs including chapter marks distributed across the duration (e.g. '[00:00] Intro', '[00:20] Hook Phase' up to length), and licensing credentials.
+3. tags: High-value searchable tags separated by commas.
+
+Return strict JSON only matching the keys: 'title', 'description', and 'tags'.`;
+
+      const aiResponse = await generateContentWithFallback(ai, {
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          systemInstruction: "You are an elite music media agent specializing in YouTube SEO branding. Always respond with valid JSON matching the exact keys requested.",
+          responseMimeType: "application/json"
+        }
+      });
+
+      const text = aiResponse.text;
+      if (text) {
+        res.json(JSON.parse(text.trim()));
+        return;
+      }
+      res.status(502).json({ error: "Copywriting generated invalid response." });
+
+    } catch (err) {
+      res.status(500).json({ error: "Creative director proxy error" });
+    }
+  });
+
+  // 6. COMMENT ASSISTANT: Generate reply drafts with style
+  app.post("/api/youtube/comments/reply-generator", async (req, res) => {
+    const { commenter, commentText } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey || apiKey === "undefined" || !apiKey.trim()) {
+      res.status(503).json({ error: "Gemini servers offline." });
+      return;
+    }
+
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build-server',
+          }
+        }
+      });
+
+      const prompt = `You are a professional, world-class music production team responding as "OGBeatz Admin".
+A viewer named "${commenter}" wrote a comment under your official visual release on YouTube:
+"${commentText}"
+
+Please draft a warm, confident, supportive, and extremely cool reply suited for a high-value music producer. Maintain a laid-back, humble, and polite demeanor. Keep it short (1 or 2 concise lines max), address them directly (e.g. "@${commenter}"), and never use corporate or formal jargon. Do not sell beats in this reply.
+
+Return valid JSON with the single key: 'replyText'.`;
+
+      const aiResponse = await generateContentWithFallback(ai, {
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          systemInstruction: "You are a professional music community expert. Always reply with valid JSON matching the schema.",
+          responseMimeType: "application/json"
+        }
+      });
+
+      const text = aiResponse.text;
+      if (text) {
+        res.json(JSON.parse(text.trim()));
+        return;
+      }
+      res.status(502).json({ error: "Failed to parse reply generation" });
+
+    } catch (err) {
+      res.status(500).json({ error: "Comment AI proxy error" });
+    }
+  });
+
   // Vite middleware for development vs static asset serving for production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

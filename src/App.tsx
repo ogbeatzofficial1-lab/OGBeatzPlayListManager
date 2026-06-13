@@ -81,6 +81,7 @@ import SharePortal from "./components/SharePortal";
 import ClientPortal from "./components/ClientPortal";
 import ShareModal from "./components/ShareModal";
 import TrackDetailsModal from "./components/TrackDetailsModal";
+import YouTubeHub from "./components/YouTubeHub";
 import { Track, ShareLink, Client, Playlist } from "./types";
 import { cn } from "./lib/utils";
 import { getSupabaseClient, supabaseUrl } from "./lib/supabase";
@@ -151,6 +152,7 @@ export default function App() {
     | "profile"
     | "client-detail"
     | "videos"
+    | "youtube"
   >("dashboard");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedMessageClientId, setSelectedMessageClientId] = useState<
@@ -4686,6 +4688,7 @@ export default function App() {
         {activeView === "sharing" && renderSharing()}
         {activeView === "profile" && renderProfile()}
         {activeView === "client-detail" && renderClientDetail()}
+        {activeView === "youtube" && <YouTubeHub />}
         {/* Settings View */}
         {activeView === "settings" && (
           <div className="p-8 space-y-8 max-w-3xl">

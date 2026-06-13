@@ -40,6 +40,7 @@ export interface Client {
   tags: string[];
   company?: string;
   phone?: string;
+  avatar_url?: string;
   created_at: string;
 }
 

@@ -73,33 +73,34 @@ const restorePromoVideoUrls = async (videosList: PromoVideo[]): Promise<PromoVid
   }
 };
 
-const UUID_TRACK_1 = "11111111-1111-1111-1111-111111111111";
-const UUID_TRACK_2 = "22222222-2222-2222-2222-222222222222";
-const UUID_TRACK_3 = "33333333-3333-3333-3333-333333333333";
-const UUID_TRACK_4 = "44444444-4444-4444-4444-444444444444";
-const UUID_TRACK_5 = "55555555-4444-3333-2222-111111111111";
+const UUID_TRACK_1 = "b3017fc8-0ae5-4ad9-a612-da0eb226d181"; // Midnight Lounge
+const UUID_TRACK_2 = "a3f4e2c9-d9f2-491b-8713-3cc0eabb55bc"; // Hyperdrive
+const UUID_TRACK_3 = "8d1ef9b2-32a5-4eb1-bca3-ef0cb4628f41"; // Trap Lord
+const UUID_TRACK_4 = "2f9bb7d4-8d9e-4cde-aef1-fa2b83492ebd"; // Soul Searching
+const UUID_TRACK_5 = "55555555-4444-3333-2222-111111111111"; // Keep Em' Thirsty
+const UUID_TRACK_6 = "5c5e62f9-2b6d-4912-986c-2f963a7d2b45"; // Cyber City
 
-const UUID_PLAYLIST_1 = "55555555-5555-5555-5555-555555555555";
-const UUID_PLAYLIST_2 = "66666666-6666-6666-6666-666666666666";
+const UUID_PLAYLIST_1 = "b42fbb1d-8422-4467-8501-c88f11762ebb"; // Lofi & Boom Bap Soul
+const UUID_PLAYLIST_2 = "51c243f6-e61e-dbba-9c2f-e8dcd9ee55bc"; // Trap & Heavy Synthesis
 
-const UUID_CLIENT_1 = "77777777-7777-7777-7777-777777777777";
-const UUID_CLIENT_2 = "88888888-8888-8888-8888-888888888888";
+const UUID_CLIENT_1 = "fa8d30e5-22b6-4acb-8f92-71cbe04663bc"; // Marcus Kane
+const UUID_CLIENT_2 = "e6a4b3d7-89df-4cfa-8123-5d3c88abf41e"; // Clara Vance
+const UUID_CLIENT_3 = "29b9f71c-3cd7-4eb3-8124-7ef001ab41eb"; // J-Flo Beats
 
-const UUID_MSG_1 = "99999999-9999-9999-9999-999999999991";
-const UUID_MSG_2 = "99999999-9999-9999-9999-999999999992";
-const UUID_MSG_3 = "99999999-9999-9999-9999-999999999993";
+const UUID_MSG_1 = "1ab5b9c0-82d1-4faa-bc12-9df0ef62bbcc";
+const UUID_MSG_2 = "88fdcae3-2cd7-42cf-be91-23caefdf01ab";
 
-const UUID_ACT_1 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1";
-const UUID_ACT_2 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2";
-const UUID_ACT_3 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3";
+const UUID_ACT_1 = "cc13d7f8-31df-4bca-bd11-ef0db4623fc5";
+const UUID_ACT_2 = "f712ac23-1d04-4bda-aee3-bc01f893cdba";
+const UUID_ACT_3 = "23ca9fd0-e69d-4fa0-bda4-25bfdcbaefd4";
 
-const UUID_PROFILE = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+const UUID_PROFILE = "cb9fba24-8141-cfa3-bdf2-cd9e11fcbcba";
 
 const MOCK_TRACKS: Track[] = [
   {
     id: UUID_TRACK_5,
     name: "Keep Em' Thirsty",
-    artist: "OG BEATZ",
+    artist: "OGBeatz",
     bpm: 140,
     key_signature: "E minor",
     duration: 162,
@@ -115,93 +116,110 @@ const MOCK_TRACKS: Track[] = [
   },
   {
     id: UUID_TRACK_1,
-    name: "Tokyo Drift Vibe",
-    artist: "OG BEATZ",
-    bpm: 140,
-    key_signature: "F#m",
-    duration: 182,
-    tags: ["Trap", "Dark", "Heavy", "Car Music"],
+    name: "Midnight Lounge",
+    artist: "OGBeatz",
+    bpm: 82,
+    key_signature: "A Minor",
+    duration: 145,
+    tags: ["Lofi", "Ambient", "Jazz", "Late Night"],
     status: 'ready' as const,
-    size: 4200000,
+    size: 3625140,
     type: "audio/mpeg",
     file_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-    image_url: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=300&auto=format&fit=crop",
-    plays: 247,
-    likes: 84,
+    image_url: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&q=80&w=400",
+    plays: 142,
+    likes: 45,
     created_at: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString()
   },
   {
     id: UUID_TRACK_2,
-    name: "Midnight Coffee",
-    artist: "OG BEATZ",
-    bpm: 85,
-    key_signature: "Am",
-    duration: 210,
-    tags: ["Lofi", "Chill", "Relaxed", "Study"],
+    name: "Hyperdrive",
+    artist: "OGBeatz",
+    bpm: 115,
+    key_signature: "G Major",
+    duration: 188,
+    tags: ["Synthwave", "Retro", "Futuristic", "Fast"],
     status: 'ready' as const,
-    size: 5100000,
+    size: 4725450,
     type: "audio/mpeg",
     file_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-    image_url: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=300&auto=format&fit=crop",
-    plays: 412,
-    likes: 195,
+    image_url: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&q=80&w=400",
+    plays: 93,
+    likes: 22,
     created_at: new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
   },
   {
     id: UUID_TRACK_3,
-    name: "Chrome Plated",
-    artist: "OG BEATZ",
-    bpm: 142,
-    key_signature: "D#m",
+    name: "Trap Lord",
+    artist: "OGBeatz",
+    bpm: 140,
+    key_signature: "C# Minor",
     duration: 165,
-    tags: ["Drill", "Aggressive", "Gritty", "Industrial"],
+    tags: ["Trap", "Dark", "Hard", "Heavy 808"],
     status: 'ready' as const,
-    size: 3800000,
+    size: 4125300,
     type: "audio/mpeg",
     file_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-    image_url: "https://images.unsplash.com/photo-1614680376593-902f74fa0d41?q=80&w=300&auto=format&fit=crop",
-    plays: 139,
-    likes: 56,
+    image_url: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&q=80&w=400",
+    plays: 228,
+    likes: 97,
     created_at: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString()
   },
   {
     id: UUID_TRACK_4,
-    name: "Acoustic Sunset",
-    artist: "OG BEATZ",
-    bpm: 112,
-    key_signature: "G",
-    duration: 195,
-    tags: ["Acoustic", "Melodic", "Organic", "Guitar"],
+    name: "Soul Searching",
+    artist: "OGBeatz",
+    bpm: 90,
+    key_signature: "F Major",
+    duration: 152,
+    tags: ["Boom Bap", "Soulful", "Vocal Chopped", "Classic"],
     status: 'ready' as const,
-    size: 4500000,
+    size: 3845010,
     type: "audio/mpeg",
     file_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-    image_url: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=300&auto=format&fit=crop",
-    plays: 89,
+    image_url: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&q=80&w=400",
+    plays: 85,
     likes: 34,
     created_at: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString()
+  },
+  {
+    id: UUID_TRACK_6,
+    name: "Cyber City",
+    artist: "OGBeatz",
+    bpm: 120,
+    key_signature: "B Minor",
+    duration: 174,
+    tags: ["Electronic", "Cyberpunk", "Heavysynth", "Aggressive"],
+    status: 'ready' as const,
+    size: 4381000,
+    type: "audio/mpeg",
+    file_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+    image_url: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&q=80&w=400",
+    plays: 119,
+    likes: 58,
+    created_at: new Date(Date.now() - 4 * 24 * 3600 * 1000).toISOString()
   }
 ];
 
 const MOCK_PLAYLISTS: Playlist[] = [
   {
     id: UUID_PLAYLIST_1,
-    name: "Unreleased Master Vol. 1",
-    description: "Premium beats curated for label executives and A&R review.",
-    image_url: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300&auto=format&fit=crop",
-    track_ids: [UUID_TRACK_5, UUID_TRACK_1, UUID_TRACK_3],
-    start_color: "#f97316",
-    end_color: "#ea580c",
+    name: "Lofi & Boom Bap Soul",
+    description: "Smooth vintage beats ideal for study sessions, relaxed reading, and vocal write-ups.",
+    image_url: "https://images.unsplash.com/photo-1453090927415-5f45085b65c0?auto=format&fit=crop&q=80&w=400",
+    track_ids: [UUID_TRACK_1, UUID_TRACK_4],
+    start_color: "#3b82f6",
+    end_color: "#1d4ed8",
     created_at: new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString()
   },
   {
     id: UUID_PLAYLIST_2,
-    name: "Late Night Chill Sessions",
-    description: "Lofi and acoustic beats perfect for songwriting and mood setting.",
-    image_url: "https://images.unsplash.com/photo-1516280440614-37939bbacd6a?q=80&w=300&auto=format&fit=crop",
-    track_ids: [UUID_TRACK_2, UUID_TRACK_4],
-    start_color: "#8b5cf6",
-    end_color: "#6d28d9",
+    name: "Trap & Heavy Synthesis",
+    description: "Intense heavy-hitting trap music, retro wave, and synth soundtracks.",
+    image_url: "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?auto=format&fit=crop&q=80&w=400",
+    track_ids: [UUID_TRACK_2, UUID_TRACK_3, UUID_TRACK_6],
+    start_color: "#ec4899",
+    end_color: "#f43f5e",
     created_at: new Date(Date.now() - 10 * 24 * 3600 * 1000).toISOString()
   }
 ];
@@ -209,23 +227,39 @@ const MOCK_PLAYLISTS: Playlist[] = [
 const MOCK_CLIENTS: Client[] = [
   {
     id: UUID_CLIENT_1,
-    name: "Marcus Cole",
-    email: "marcus@epicrecords.com",
+    name: "Marcus Kane",
+    email: "marcus@defjam.com",
     status: "online",
     last_active: new Date().toISOString(),
-    tags: ["A&R", "Epic Records", "Billboard"],
-    company: "Epic Records",
+    tags: ["VIP", "A&R", "Major Label"],
+    company: "Def Jam Recordings",
+    phone: "+1 (555) 234-5678",
+    avatar_url: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200",
     created_at: new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
   },
   {
     id: UUID_CLIENT_2,
-    name: "Sarah Jenkins",
-    email: "sarah@independent.io",
-    status: "offline",
-    last_active: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-    tags: ["Vocalist", "Independent Artist", "Collab"],
-    company: "Independent",
+    name: "Clara Vance",
+    email: "clara.vance@soundrepublic.io",
+    status: "away",
+    last_active: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+    tags: ["Publisher", "Sync Agent"],
+    company: "Sound Republic Publishing",
+    phone: "+1 (555) 765-4321",
+    avatar_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200",
     created_at: new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString()
+  },
+  {
+    id: UUID_CLIENT_3,
+    name: "J-Flo Beats",
+    email: "jflo@independent.com",
+    status: "offline",
+    last_active: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
+    tags: ["Vocalist", "Songwriter"],
+    company: "Independent Artist",
+    phone: "",
+    avatar_url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200",
+    created_at: new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString()
   }
 ];
 
@@ -234,27 +268,18 @@ const MOCK_MESSAGES: Message[] = [
     id: UUID_MSG_1,
     client_id: UUID_CLIENT_1,
     recipient_id: "producer@ogbeatz.com",
-    content: "Yo! Just listened to 'Tokyo Drift Vibe'. This is perfect for the new album project. Can we discuss licensing?",
+    content: "Yo OG! Clean mixing on Midnight Lounge. I love the sax loop. Do you have the tracking stems ready?",
     direction: "inbound",
-    timestamp: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
+    timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     is_read: false
   },
   {
     id: UUID_MSG_2,
     client_id: UUID_CLIENT_1,
-    recipient_id: "marcus@epicrecords.com",
-    content: "Let me know when you are free for a call. I need the track stems draft as well.",
-    direction: "inbound",
-    timestamp: new Date(Date.now() - 2.5 * 3600 * 1000).toISOString(),
-    is_read: false
-  },
-  {
-    id: UUID_MSG_3,
-    client_id: UUID_CLIENT_2,
-    recipient_id: "producer@ogbeatz.com",
-    content: "Hey, the 'Late Night' beats packet is beautiful! Working on some vocal melodies tonight.",
-    direction: "inbound",
-    timestamp: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
+    recipient_id: "marcus@defjam.com",
+    content: "Thanks Marcus! Stems are completely consolidated. I can upload them into your secure link right now.",
+    direction: "outbound",
+    timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
     is_read: true
   }
 ];
@@ -263,47 +288,49 @@ const MOCK_ACTIVITIES: Activity[] = [
   {
     id: UUID_ACT_1,
     type: "play",
-    user: "Marcus Cole",
-    action: "listened to",
-    target: "Tokyo Drift Vibe",
-    details: "Played 100% of track",
+    user: "Marcus Kane",
+    action: "Streamed reference mix",
+    target: "Midnight Lounge",
+    details: "Listened to 100% of the audio review draft.",
     track_id: UUID_TRACK_1,
     client_id: UUID_CLIENT_1,
-    timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString()
+    timestamp: new Date(Date.now() - 3 * 60 * 1000).toISOString()
   },
   {
     id: UUID_ACT_2,
     type: "download",
-    user: "Sarah Jenkins",
-    action: "downloaded",
-    target: "Midnight Coffee",
-    details: "Standard WAV license",
-    track_id: UUID_TRACK_2,
-    client_id: UUID_CLIENT_2,
-    timestamp: new Date(Date.now() - 5 * 3600 * 1000).toISOString()
+    user: "Marcus Kane",
+    action: "Downloaded raw audio file",
+    target: "Midnight Lounge",
+    details: "Downloaded file (MIME: audio/mpeg, Size: 3.6MB)",
+    track_id: UUID_TRACK_1,
+    client_id: UUID_CLIENT_1,
+    timestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString()
   },
   {
     id: UUID_ACT_3,
-    type: "share",
-    user: "OG BEATZ",
-    action: "generated links for",
-    target: "Unreleased Master Vol. 1",
+    type: "play",
+    user: "Clara Vance",
+    action: "Streamed reference mix",
+    target: "Lofi & Boom Bap Soul",
+    details: "Played Soul Searching track inside the tape review portal.",
     playlist_id: UUID_PLAYLIST_1,
-    timestamp: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString()
+    client_id: UUID_CLIENT_2,
+    timestamp: new Date(Date.now() - 45 * 60 * 1000).toISOString()
   }
 ];
 
 const MOCK_PROFILE: UserProfile = {
   id: UUID_PROFILE,
-  name: "OG BEATZ",
+  name: "OG BEATZ Admin",
   artist_name: "OG BEATZ",
-  email: "producer@ogbeatz.com",
-  avatar_url: "https://images.unsplash.com/photo-1614680376593-902f74fa0d41?q=80&w=300&auto=format&fit=crop",
-  bio: "Master Recording Engineer, Multi-Platinum Producer, & Architect of OG BEATZ vault.",
+  email: "cdtfullsail@gmail.com",
+  avatar_url: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=450",
+  bio: "Multi-platinum platinum-grade sound producer, mixing engineer, and audio director. Author of modern catalog beat tape reviews.",
   social_links: {
-    instagram: "ogbeatz_prod",
-    spotify: "ogbeatz",
-    twitter: "ogbeatz"
+    instagram: "https://instagram.com/ogbeatz",
+    spotify: "https://open.spotify.com/artist/ogbeatz",
+    twitter: "https://twitter.com/ogbeatz"
   }
 };
 
@@ -316,14 +343,11 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       if (cached) {
         const parsed = JSON.parse(cached) as Track[];
         if (parsed && parsed.length > 0) {
-          const hasKeepEmThirsty = parsed.some(t => t.id === UUID_TRACK_5 || (t.name && t.name.toLowerCase().includes("thirsty")));
-          if (!hasKeepEmThirsty) {
-            const defaultKeep = MOCK_TRACKS.find(t => t.id === UUID_TRACK_5);
-            if (defaultKeep) {
-              return [defaultKeep, ...parsed];
-            }
+          // If the cached list contains old mock entries like 'Tokyo Drift Vibe', discard the entire cache to purge old residues
+          const carriesOldResidue = parsed.some(t => t.id === "11111111-1111-1111-1111-111111111111" || t.name === "Tokyo Drift Vibe" || t.name === "Midnight Coffee");
+          if (!carriesOldResidue) {
+            return parsed;
           }
-          return parsed;
         }
       }
       return MOCK_TRACKS;
@@ -338,11 +362,11 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       if (cached) {
         const parsed = JSON.parse(cached) as Playlist[];
         if (parsed && parsed.length > 0) {
-          const first = parsed.find(p => p.id === UUID_PLAYLIST_1);
-          if (first && !first.track_ids?.includes(UUID_TRACK_5)) {
-            first.track_ids = [UUID_TRACK_5, ...(first.track_ids || [])];
+          // If the cached list contains old mock playlists, discard
+          const carriesOldResidue = parsed.some(p => p.id === "55555555-5555-5555-5555-555555555555" || p.name === "Unreleased Master Vol. 1");
+          if (!carriesOldResidue) {
+            return parsed;
           }
-          return parsed;
         }
       }
       return MOCK_PLAYLISTS;
@@ -356,7 +380,10 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       const cached = localStorage.getItem('ogbeatz_clients');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed && parsed.length > 0) return parsed;
+        if (parsed && parsed.length > 0) {
+          const carriesOldResidue = parsed.some((c: any) => c.name === "Marcus Cole");
+          if (!carriesOldResidue) return parsed;
+        }
       }
       return MOCK_CLIENTS;
     } catch {
@@ -369,7 +396,10 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       const cached = localStorage.getItem('ogbeatz_activities');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed && parsed.length > 0) return parsed;
+        if (parsed && parsed.length > 0) {
+          const carriesOldResidue = parsed.some((a: any) => a.target === "Tokyo Drift Vibe");
+          if (!carriesOldResidue) return parsed;
+        }
       }
       return MOCK_ACTIVITIES;
     } catch {
@@ -391,7 +421,10 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       const cached = localStorage.getItem('ogbeatz_messages');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed && parsed.length > 0) return parsed;
+        if (parsed && parsed.length > 0) {
+          const carriesOldResidue = parsed.some((m: any) => m.content && m.content.includes("Tokyo Drift Vibe"));
+          if (!carriesOldResidue) return parsed;
+        }
       }
       return MOCK_MESSAGES;
     } catch {
@@ -411,7 +444,13 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
   const [profile, setProfile] = useState<UserProfile | null>(() => {
     try {
       const cached = localStorage.getItem('ogbeatz_profile');
-      return cached ? JSON.parse(cached) : MOCK_PROFILE;
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.name === "OG BEATZ Admin") {
+          return parsed;
+        }
+      }
+      return MOCK_PROFILE;
     } catch {
       return MOCK_PROFILE;
     }
@@ -470,23 +509,24 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
         let isDbConnected = false;
         if (activeSupabase) {
           try {
-            setLoadingStatusText("Probing cloud link...");
+            setLoadingStatusText("Verifying database link...");
             const coldStartTimer = setTimeout(() => {
               setLoadingStatusText("Waking up cold database (takes 10-25s)...");
               setLoadingProgress(15);
-            }, 3000);
+            }, 1000);
 
-            // Robust probe check with a 25000ms timeout to detect pause/sleep/dns blockage and allow wake-ups
+            // Fast connection verify check with a 4000ms timeout.
+            // If it fails or times out, we DO NOT null activeSupabase - we still proceed and let actual table queries fetch or fallback cleanly!
             await Promise.race([
               activeSupabase.from('profiles').select('id').limit(1),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("Database connection probe timed out")), 25000))
-            ]);
+              new Promise((_, reject) => setTimeout(() => reject(new Error("Database check timeout")), 4000))
+            ]).catch(() => {});
+
             clearTimeout(coldStartTimer);
             isDbConnected = true;
           } catch (probeErr: any) {
-            console.warn("[Supabase Connection Probe] Cloud failed to respond or refused connection within 25 seconds. Switching to offline-safe cache model:", probeErr);
-            isDbConnected = false;
-            activeSupabase = null;
+            console.warn("[Supabase Connection Probe] Cloud did not resolve instantly; proceeding with fallback fetch rules:", probeErr);
+            isDbConnected = true;
           }
         }
 
