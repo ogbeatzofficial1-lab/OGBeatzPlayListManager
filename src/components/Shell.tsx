@@ -8,7 +8,8 @@ import {
   Activity,
   Share2,
   Video,
-  Shield
+  Shield,
+  Youtube
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -26,6 +27,7 @@ export default function Shell({ children, activeView, onViewChange }: ShellProps
     { id: 'clients', label: 'Clients', icon: Users },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'videos', label: 'Videos', icon: Video },
+    { id: 'youtube', label: 'YouTube Hub', icon: Youtube },
     { id: 'sharing', label: 'Sharing', icon: Share2 },
     { id: 'activity', label: 'Activity', icon: Activity },
     { id: 'settings', label: 'Settings', icon: Settings },

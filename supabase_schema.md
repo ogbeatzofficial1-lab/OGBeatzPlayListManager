@@ -207,6 +207,59 @@ Interactive checklist, listing review task notes and studio engineering adjustme
 
 ---
 
+### L) `youtube_channels`
+Stores connected Google/YouTube channel credentials, profile details, and subscriber counts.
+
+| Column | PG Type | Default | Constraints | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `uuid_generate_v4()` | `PRIMARY KEY` | Internal database channel identifier. |
+| `channel_id` | `TEXT` | *None* | `UNIQUE`, `NOT NULL` | External YouTube Channel ID. |
+| `channel_name` | `TEXT` | *None* | `NOT NULL` | Public channel title. |
+| `subscriber_count` | `BIGINT` | `0` | | Display subscriber count of the channel. |
+| `avatar_url` | `TEXT` | `NULL` | | Google profile avatar picture URL. |
+| `access_token` | `TEXT` | `NULL` | | Encrypted active channel OAuth access key. |
+| `refresh_token` | `TEXT` | `NULL` | | Long-term OAuth refresh key. |
+| `connected_at` | `TIMESTAMPTZ` | `NOW()` | | Timestamp when channel was synchronized. |
+
+---
+
+### M) `youtube_videos`
+Catalog of visualizer releases published on YouTube associated with track stems.
+
+| Column | PG Type | Default | Constraints | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `uuid_generate_v4()` | `PRIMARY KEY` | Internal video entry reference. |
+| `youtube_id` | `TEXT` | *None* | `UNIQUE`, `NOT NULL` | External YouTube Video ID (e.g. video slug). |
+| `promo_video_id` | `UUID` | `NULL` | `REFERENCES promo_videos(id)` | Key aligning the published video with generated visuals. |
+| `track_id` | `UUID` | `NULL` | `REFERENCES tracks(id)` | Original source track from the library. |
+| `title` | `TEXT` | *None* | `NOT NULL` | Search-optimized video release title. |
+| `style` | `TEXT` | `NULL` | | The visual template outline used. |
+| `views` | `INTEGER` | `0` | | Total organic view count. |
+| `likes` | `INTEGER` | `0` | | Total video thumbs-up score. |
+| `comments_count` | `INTEGER` | `0` | | Aggregate viewer comment responses on YouTube. |
+| `visibility` | `TEXT` | `'public'` | `CHECK IN ('private', 'unlisted', 'public')` | Video publication privacy parameter state. |
+| `thumbnail_url` | `TEXT` | `NULL` | | Thumbnail picture cover URL. |
+| `published_at` | `TIMESTAMPTZ` | `NOW()` | | Timestamp when published to YouTube. |
+
+---
+
+### N) `youtube_comments`
+Direct stream of fan remarks under published YouTube visualizers synced to the dashboard.
+
+| Column | PG Type | Default | Constraints | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `uuid_generate_v4()` | `PRIMARY KEY` | Comment entry unique key. |
+| `video_id` | `UUID` | *None* | `REFERENCES youtube_videos(id) ON DELETE CASCADE` | Associated published video. |
+| `author` | `TEXT` | *None* | `NOT NULL` | YouTube user handle of commenter. |
+| `avatar_url` | `TEXT` | `NULL` | | User profile picture URL. |
+| `content` | `TEXT` | *None* | `NOT NULL` | Text body of the commenter. |
+| `likes` | `INTEGER` | `0` | | Upvote count metrics of the comment. |
+| `replied` | `BOOLEAN` | `false` | | Toggle tracking whether Admin has responded. |
+| `reply_content` | `TEXT` | `NULL` | | Custom or AI-generated reply draft text. |
+| `commented_at` | `TIMESTAMPTZ` | `NOW()` | | Timestamp when comment was logged on YouTube. |
+
+---
+
 ## 2.1. Supabase Storage Buckets Setup
 
 To allow the application to upload and stream media assets, two public storage buckets are automatically provisioned in the schema:

@@ -142,6 +142,48 @@ CREATE TABLE IF NOT EXISTS todos (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- K) YouTube Connected Channels
+CREATE TABLE IF NOT EXISTS youtube_channels (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  channel_id TEXT UNIQUE NOT NULL,
+  channel_name TEXT NOT NULL,
+  subscriber_count BIGINT DEFAULT 0,
+  avatar_url TEXT,
+  access_token TEXT,
+  refresh_token TEXT,
+  connected_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- L) YouTube Published Videos
+CREATE TABLE IF NOT EXISTS youtube_videos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  youtube_id TEXT UNIQUE NOT NULL,
+  promo_video_id UUID REFERENCES promo_videos(id) ON DELETE SET NULL,
+  track_id UUID REFERENCES tracks(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  style TEXT,
+  views INTEGER DEFAULT 0,
+  likes INTEGER DEFAULT 0,
+  comments_count INTEGER DEFAULT 0,
+  visibility TEXT CHECK (visibility IN ('private', 'unlisted', 'public')) DEFAULT 'public',
+  thumbnail_url TEXT,
+  published_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- M) YouTube Viewer Comments
+CREATE TABLE IF NOT EXISTS youtube_comments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  video_id UUID REFERENCES youtube_videos(id) ON DELETE CASCADE,
+  author TEXT NOT NULL,
+  avatar_url TEXT,
+  content TEXT NOT NULL,
+  likes INTEGER DEFAULT 0,
+  replied BOOLEAN DEFAULT false,
+  reply_content TEXT,
+  commented_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
 
 -- --------------------------------------------------
 -- 2. SCHEMATIC PERFORMANCE INDEXES
@@ -197,6 +239,9 @@ ALTER TABLE promo_videos DISABLE ROW LEVEL SECURITY;
 ALTER TABLE promo_packs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE todos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE youtube_channels DISABLE ROW LEVEL SECURITY;
+ALTER TABLE youtube_videos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE youtube_comments DISABLE ROW LEVEL SECURITY;
 
 -- Grant massive database-level permissions on public schema to all connected user roles
 -- This ensures that 'anon', 'authenticated', and native roles can query and write to any tables.
@@ -236,6 +281,9 @@ BEGIN
     DROP POLICY IF EXISTS "Public Access" ON promo_packs;
     DROP POLICY IF EXISTS "Public Access" ON profiles;
     DROP POLICY IF EXISTS "Public Access" ON todos;
+    DROP POLICY IF EXISTS "Public Access" ON youtube_channels;
+    DROP POLICY IF EXISTS "Public Access" ON youtube_videos;
+    DROP POLICY IF EXISTS "Public Access" ON youtube_comments;
 
     -- Create new fully-permissive policies for ALL operations and ALL roles
     CREATE POLICY "Public Access" ON tracks FOR ALL TO public USING (true) WITH CHECK (true);
@@ -248,6 +296,9 @@ BEGIN
     CREATE POLICY "Public Access" ON promo_packs FOR ALL TO public USING (true) WITH CHECK (true);
     CREATE POLICY "Public Access" ON profiles FOR ALL TO public USING (true) WITH CHECK (true);
     CREATE POLICY "Public Access" ON todos FOR ALL TO public USING (true) WITH CHECK (true);
+    CREATE POLICY "Public Access" ON youtube_channels FOR ALL TO public USING (true) WITH CHECK (true);
+    CREATE POLICY "Public Access" ON youtube_videos FOR ALL TO public USING (true) WITH CHECK (true);
+    CREATE POLICY "Public Access" ON youtube_comments FOR ALL TO public USING (true) WITH CHECK (true);
 
     -- Setup fully-permissive storage policies on storage.objects for unrestricted file upload/download
     DROP POLICY IF EXISTS "Public Storage Read" ON storage.objects;
@@ -272,6 +323,9 @@ END $$;
 TRUNCATE TABLE todos RESTART IDENTITY CASCADE;
 TRUNCATE TABLE profiles RESTART IDENTITY CASCADE;
 TRUNCATE TABLE promo_packs RESTART IDENTITY CASCADE;
+TRUNCATE TABLE youtube_comments RESTART IDENTITY CASCADE;
+TRUNCATE TABLE youtube_videos RESTART IDENTITY CASCADE;
+TRUNCATE TABLE youtube_channels RESTART IDENTITY CASCADE;
 TRUNCATE TABLE promo_videos RESTART IDENTITY CASCADE;
 TRUNCATE TABLE messages RESTART IDENTITY CASCADE;
 TRUNCATE TABLE activities RESTART IDENTITY CASCADE;
@@ -339,6 +393,24 @@ INSERT INTO todos (id, title, completed) VALUES
 ('cf12cbdb-2fdf-aef1-abdd-be01faefbbcc', 'Export high-quality WAV tracks stems for Marcus DefJam review', false),
 ('92bfbbaa-ade1-cb88-eb21-cb9efae9ffbf', 'Resolve audio compression issue inside Cyber City visualizer', true);
 
+-- Insert YouTube Connected Channel
+INSERT INTO youtube_channels (id, channel_id, channel_name, subscriber_count, avatar_url, access_token, refresh_token) VALUES
+('5f1eb01e-a4d1-4fa2-bc88-9dfbef9fbcba', 'UCabc123_ogbeatz_ref', 'OG BEATZ OFFICIAL', 124500, 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop', 'simulated_access_token_beatz_master_101', 'simulated_refresh_token_beatz_master_101');
+
+-- Insert YouTube Published Videos
+INSERT INTO youtube_videos (id, youtube_id, promo_video_id, track_id, title, style, views, likes, comments_count, visibility, thumbnail_url, published_at) VALUES
+('a01fb01d-9ff1-411a-bc01-df17faefdd11', 'y_pv_trap_lord', (SELECT id FROM promo_videos WHERE id = 'bc1dfe8d-d9ff-411a-b0df-cf17faefdd11'), (SELECT id FROM tracks WHERE id = '8d1ef9b2-32a5-4eb1-bca3-ef0cb4628f41'), 'OGBeatz - Trap Lord | Dark Trap Beat (Heavy 808 Visualizer)', 'Cyberpunk Neon Visualizer', 14200, 892, 2, 'public', 'https://images.unsplash.com/photo-1614149162883-504ce4d13909?auto=format&fit=crop&q=80&w=400', NOW() - INTERVAL '4 days'),
+('b01fb01d-9ff1-411a-bc01-df17faefdd22', 'y_pv_cyber_city', (SELECT id FROM promo_videos WHERE id = 'df1dafd1-bbd9-cfa1-aee2-cb02fa2be18d'), (SELECT id FROM tracks WHERE id = '5c5e62f9-2b6d-4912-986c-2f963a7d2b45'), 'OGBeatz - Cyber City | Cyberpunk Synthwave Instrumental', 'Retro Wave Drive loop', 8500, 432, 1, 'public', 'https://images.unsplash.com/photo-1578301978693-85fa9c0320b9?auto=format&fit=crop&q=80&w=400', NOW() - INTERVAL '2 days');
+
+-- Insert YouTube Comments
+INSERT INTO youtube_comments (id, video_id, author, avatar_url, content, likes, replied, reply_content, commented_at) VALUES
+('c01fb01e-9ff1-411a-bc01-df17faefdd33', 'a01fb01d-9ff1-411a-bc01-df17faefdd11', '@BeatCrafter99', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=80', 'This low end is absolutely disgusting! 🤯 What limiters are you using on your 808 bus?', 14, true, 'Appreciate you, fam! Just matching standard saturation on basic wave distortion and light clipping on the stereo master.', NOW() - INTERVAL '3 hours'),
+('c01fb01e-9ff1-411a-bc01-df17faefdd44', 'a01fb01d-9ff1-411a-bc01-df17faefdd11', '@VibeCheckRecords', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=80', 'This visualizer goes hard with the kick pulses. Sending this to our A&R team asap.', 8, false, NULL, NOW() - INTERVAL '1 hour'),
+('c01fb01e-9ff1-411a-bc01-df17faefdd55', 'b01fb01d-9ff1-411a-bc01-df17faefdd22', '@LofiRider', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=80', 'Such a perfect high speed midnight driving vibe. Amazing snare textures!', 11, false, NULL, NOW() - INTERVAL '1 day');
+
 -- Verification Check
 SELECT count(*) AS tracks_count FROM tracks;
 SELECT count(*) AS clients_count FROM clients;
+SELECT count(*) AS youtube_channels_count FROM youtube_channels;
+SELECT count(*) AS youtube_videos_count FROM youtube_videos;
+SELECT count(*) AS youtube_comments_count FROM youtube_comments;

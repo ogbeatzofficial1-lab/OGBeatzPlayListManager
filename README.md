@@ -129,7 +129,84 @@ The CRM client registry handles importing CSV data securely:
 
 ---
 
-## 🔒 4. System Constraints & Dependencies
+## 📢 4. YouTube Hub, Google OAuth & Supabase Synchronizer
+
+The system features a real-time **YouTube Hub** to link, track, and manage promotional visualizer releases. Content is synchronized with Supabase utilizing a dual-layer OAuth handshake, combined with automated AI-assisted copywriting and comment response recommendations.
+
+### A. Google Developer Console Credentials Setup
+To utilize live Google API and YouTube integrations, coordinate these access credentials inside your Google Cloud configuration:
+
+1. **Create Client ID & Secret**: Go to the [Google Cloud Console](https://console.cloud.google.com/) and create a new project. Navigate to **APIs & Services > Credentials** and select **Create Credentials > OAuth Client ID**. Select **Web Application** as your application type.
+2. **Configure Scopes**: Ensure your app requests access to these official scopes:
+   * `https://www.googleapis.com/auth/youtube.readonly` — Tracks channel metrics, counts, and comments.
+   * `https://www.googleapis.com/auth/youtube.upload` — Allows uploading newly generated promos.
+3. **Register Authorized Redirect URIs**: Mount your exact web domain destination callback. For standard runs, add:
+   * `https://YOUR_DOMAIN/api/youtube/callback`
+   * `http://localhost:3000/api/youtube/callback` (Local Development)
+4. **Acquire Environment Secrets**: Save your generated OAuth keys to your `.env` or application configuration parameters:
+   * `GOOGLE_CLIENT_ID` = `your_google_oauth_client_id`
+   * `GOOGLE_CLIENT_SECRET` = `your_google_oauth_client_secret`
+
+*Note: If no Google Console tokens are assigned, the interface defaults to a simulated/sandbox channel framework enabling secure dry-runs of all YouTube copywriting, publishing workflows, and metrics sync.*
+
+### B. Relational Supabase Schema Details
+The YouTube platform synchronizes metrics, videos, and comments directly inside your relational database schema. Run this SQL block in your Supabase SQL Editor to provision structural tables, performance indices, and bypass Row Level Security policies:
+
+```sql
+-- 1. YouTube Connected Channels
+CREATE TABLE IF NOT EXISTS youtube_channels (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  channel_id TEXT UNIQUE NOT NULL,
+  channel_name TEXT NOT NULL,
+  subscriber_count BIGINT DEFAULT 0,
+  avatar_url TEXT,
+  access_token TEXT,
+  refresh_token TEXT,
+  connected_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. YouTube Published Videos
+CREATE TABLE IF NOT EXISTS youtube_videos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  youtube_id TEXT UNIQUE NOT NULL,
+  promo_video_id UUID REFERENCES promo_videos(id) ON DELETE SET NULL,
+  track_id UUID REFERENCES tracks(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  style TEXT,
+  views INTEGER DEFAULT 0,
+  likes INTEGER DEFAULT 0,
+  comments_count INTEGER DEFAULT 0,
+  visibility TEXT CHECK (visibility IN ('private', 'unlisted', 'public')) DEFAULT 'public',
+  thumbnail_url TEXT,
+  published_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. YouTube Viewer Comments & AI Responses
+CREATE TABLE IF NOT EXISTS youtube_comments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  video_id UUID REFERENCES youtube_videos(id) ON DELETE CASCADE,
+  author TEXT NOT NULL,
+  avatar_url TEXT,
+  content TEXT NOT NULL,
+  likes INTEGER DEFAULT 0,
+  replied BOOLEAN DEFAULT false,
+  reply_content TEXT,
+  commented_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Fast-Scan Performance Indexing
+CREATE INDEX IF NOT EXISTS idx_youtube_videos_youtube_id ON youtube_videos (youtube_id);
+CREATE INDEX IF NOT EXISTS idx_youtube_comments_video_id ON youtube_comments (video_id);
+
+-- 5. Access Control Synchronization
+ALTER TABLE youtube_channels DISABLE ROW LEVEL SECURITY;
+ALTER TABLE youtube_videos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE youtube_comments DISABLE ROW LEVEL SECURITY;
+```
+
+---
+
+## 🔒 5. System Constraints & Dependencies
 
 *   **Offline Fallback Mode**: If database connections block or are absent, the application gracefully routes all operations to the highly optimized fallback memory layer, ensuring 100% uptime with no terminal crashes.
 *   **Thread Safety in Client Memory**: Sequential writes serialize synchronously to `localStorage` partitions to prevent state corruption during rapid operations.
@@ -137,7 +214,7 @@ The CRM client registry handles importing CSV data securely:
 
 ---
 
-## 🚀 5. Quick Start & Deployment Guide
+## 🚀 6. Quick Start & Deployment Guide
 
 Follow these steps to initialize and run this exact system from a bare-metal terminal.
 

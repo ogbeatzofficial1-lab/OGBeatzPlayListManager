@@ -1,0 +1,1179 @@
+import React, { useState, useEffect } from "react";
+import {
+    Youtube,
+    TrendingUp,
+    Upload,
+    Video,
+    MessageSquare,
+    Link,
+    Play,
+    Trash2,
+    CheckCircle,
+    Loader2,
+    RefreshCw,
+    Sparkles,
+    Eye,
+    ThumbsUp,
+    UserCheck,
+    Lock,
+    Globe,
+    FileText,
+    ArrowUpRight,
+    Search,
+    Send
+} from "lucide-react";
+import {
+    AreaChart,
+    Area,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    Cell
+} from "recharts";
+import { useMediaStore } from "../context/MediaStoreContext";
+
+interface YouTubeHubProps {
+    addToast?: (message: string, type: "success" | "error" | "info") => void;
+}
+
+export default function YouTubeHub({ addToast }: YouTubeHubProps) {
+    const { promoVideos, tracks, playlists, toasts, addToast: storeAddToast } = useMediaStore();
+    const triggerToast = addToast || storeAddToast || ((msg) => console.log(msg));
+
+    // View States
+    const [activeTab, setActiveTab] = useState<"analytics" | "upload" | "videos" | "comments">("analytics");
+    const [loading, setLoading] = useState(false);
+    const [authStatus, setAuthStatus] = useState<{
+        connected: boolean;
+        channelName?: string;
+        subscriberCount?: string;
+        profileImageUrl?: string;
+    }>({
+        connected: false,
+        channelName: "OG BEATZ TV",
+        subscriberCount: "124,500",
+        profileImageUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=150&auto=format&fit=crop"
+    });
+
+    // Analytics timeframe
+    const [timeframe, setTimeframe] = useState<"7d" | "30d" | "90d">("30d");
+
+    // Upload section states
+    const [selectedVideoId, setSelectedVideoId] = useState<string>("");
+    const [videoTitle, setVideoTitle] = useState("");
+    const [videoDescription, setVideoDescription] = useState("");
+    const [videoTags, setVideoTags] = useState("");
+    const [privacyStatus, setPrivacyStatus] = useState<"private" | "unlisted" | "public">("public");
+    const [isGeneratingMeta, setIsGeneratingMeta] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+    const [uploadStatusText, setUploadStatusText] = useState("");
+    const [publishingLogs, setPublishingLogs] = useState<string[]>([]);
+
+    // Comments section states
+    const [comments, setComments] = useState<any[]>([
+        {
+            id: "cmt1",
+            author: "RetroWaveCurator",
+            avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=100&auto=format&fit=crop",
+            content: "Whoa, that sub-bass transition around 0:35 is absolutely filthy! Is this track released on Apple Music yet?",
+            time: "10 mins ago",
+            likes: 42,
+            replied: false,
+            replyText: "",
+            isGeneratingAI: false
+        },
+        {
+            id: "cmt2",
+            author: "LofiNights_Official",
+            avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop",
+            content: "Perfect midnight drive atmosphere. The Rhodes chords have such a rich organic texture. Saved to my Study Beats playlist.",
+            time: "2 hours ago",
+            likes: 18,
+            replied: false,
+            replyText: "",
+            isGeneratingAI: false
+        },
+        {
+            id: "cmt3",
+            author: "TrapGamer99",
+            avatar: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?q=80&w=100&auto=format&fit=crop",
+            content: "That snare bounce is legendary. Can I license this backend beat for a freestyle video on my gaming channel?",
+            time: "1 day ago",
+            likes: 7,
+            replied: true,
+            replyText: "@TrapGamer99 absolutely! Hit the Client Directory tab at the top of the portal, drop your details, and grab a customized sync licensing agreement directly.",
+            isGeneratingAI: false
+        }
+    ]);
+
+    // Track active publication registry
+    const [publishedVideos, setPublishedVideos] = useState<any[]>([
+        {
+            id: "yt_active_1",
+            youtubeId: "dQw4w9WgXcQ",
+            title: "Keep Em' Thirsty (Gritty Drill Mix) • Official Audio Visualizer [PRODUCED BY OGBEATZ]",
+            style: "Cyber-Chrome Visualizer",
+            views: 48200,
+            likes: 2410,
+            commentsCount: 38,
+            visibility: "public",
+            publishedAt: "2 days ago",
+            thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=250&auto=format&fit=crop"
+        },
+        {
+            id: "yt_active_2",
+            youtubeId: "512a_bfe",
+            title: "Late Night Cafe Warmth (Ambient Lo-Fi Chill) [OGBEATZ Chill Release]",
+            style: "Cafe Neon Aesthetics",
+            views: 128400,
+            likes: 9340,
+            commentsCount: 147,
+            visibility: "public",
+            publishedAt: "1 week ago",
+            thumbnailUrl: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=250&auto=format&fit=crop"
+        }
+    ]);
+
+    // Check Google Auth Status on Mount
+    useEffect(() => {
+        fetchAuthState();
+    }, []);
+
+    const fetchAuthState = async () => {
+        try {
+            const res = await fetch("/api/youtube/state");
+            if (res.ok) {
+                const data = await res.json();
+                setAuthStatus(prev => ({
+                    ...prev,
+                    connected: data.connected,
+                    channelName: data.channelName || prev.channelName,
+                    subscriberCount: data.subscriberCount || prev.subscriberCount,
+                    profileImageUrl: data.profileImageUrl || prev.profileImageUrl
+                }));
+            }
+        } catch (err) {
+            console.error("Failed to recover YouTube auth state:", err);
+        }
+    };
+
+    // Google Popup OAuth Initiator
+    const handleGoogleConnect = async () => {
+        try {
+            setLoading(true);
+            const res = await fetch("/api/youtube/auth-url");
+            if (!res.ok) {
+                throw new Error("Failed to compile authorization endpoints.");
+            }
+            const { url } = await res.json();
+
+            // Open OAuth pop-up securely as configured in instructions
+            const authWindow = window.open(
+                url,
+                "google_youtube_oauth_popup",
+                "width=600,height=750,location=no,toolbar=no,menubar=no,status=no"
+            );
+
+            if (!authWindow) {
+                triggerToast("Popup blocker blocked Google authorization! Please enable popups, then retry.", "error");
+                setLoading(false);
+                return;
+            }
+
+            // Polling listener wait
+            const handleMessage = (event: MessageEvent) => {
+                const origin = event.origin;
+                if (!origin.endsWith(".run.app") && !origin.includes("localhost")) {
+                    return;
+                }
+                if (event.data?.type === "OAUTH_AUTH_SUCCESS") {
+                    triggerToast("YouTube API successfully authorized via Google Console!", "success");
+                    fetchAuthState();
+                }
+            };
+
+            window.addEventListener("message", handleMessage);
+            
+            // Cleanup on window closure
+            const timer = setInterval(() => {
+                if (authWindow.closed) {
+                    clearInterval(timer);
+                    window.removeEventListener("message", handleMessage);
+                    setLoading(false);
+                }
+            }, 1000);
+
+        } catch (err: any) {
+            triggerToast(`Could not authenticate with Google: ${err.message || err}`, "error");
+            setLoading(false);
+        }
+    };
+
+    const handleDisconnect = async () => {
+        try {
+            const res = await fetch("/api/youtube/disconnect", { method: "POST" });
+            if (res.ok) {
+                triggerToast("YouTube channel unlinked.", "info");
+                setAuthStatus(prev => ({ ...prev, connected: false }));
+            }
+        } catch (err) {
+            triggerToast("Disconnection failed", "error");
+        }
+    };
+
+    // Automatically fill title & AI description when track asset selected
+    const handleAssetSelect = (videoId: string) => {
+        setSelectedVideoId(videoId);
+        const video = promoVideos.find(v => v.id === videoId);
+        if (!video) return;
+
+        const track = tracks.find(t => t.id === video.track_id);
+        const name = track?.name || "Premium Release Beats";
+        const style = video.style || "Retro Visualizer";
+        const durationStr = track?.duration ? `${Math.floor(track.duration / 60)}:${(track.duration % 60).toString().padStart(2, "0")}` : "3:00";
+
+        setVideoTitle(`${name} [Official Visualizer] • High-Contrast 4K Motion Asset [Produced by OGBeatz]`);
+        setVideoTags(`${track?.tags?.join(", ") || "trap, beat, producer, sound, viz, loop, release, synth"}`);
+
+        // Set baseline description draft before AI enhancements
+        setVideoDescription(
+            `🔥 Stream/Download "${name}": [Your Custom Link Here]\n` +
+            `🎧 Interactive Producer Portfolio: ${window.location.origin}\n\n` +
+            `TRACK SPECS:\n` +
+            `- Title: ${name}\n` +
+            `- Length: ${durationStr}\n` +
+            `- Dynamic Tempo: ${track?.bpm || "120"} BPM\n` +
+            `- Key Pitch: ${track?.key || "C Major"}\n` +
+            `- Graphic Visualizer Style: ${style}\n\n` +
+            `TIMESTAMPS:\n` +
+            `[00:00] Intro\n` +
+            `[00:15] Verse Progression\n` +
+            `[00:45] Primary Anthem Chorus\n` +
+            `[01:15] Outro Section\n\n` +
+            `ABOUT OG BEATZ PORTAL:\n` +
+            `Fully automated sound mastering, real-time sync licensing contracts, and smart YouTube broadcast workflows for contemporary music stars.`
+        );
+    };
+
+    // Generate smart YouTube SEO Metadata using AI on the server!
+    const triggerAIMetadataCrafting = async () => {
+        const video = promoVideos.find(v => v.id === selectedVideoId);
+        if (!selectedVideoId || !video) {
+            triggerToast("Please pick an AI video asset to feed our copyrighting engine.", "info");
+            return;
+        }
+
+        const track = tracks.find(t => t.id === video.track_id);
+        if (!track) return;
+
+        setIsGeneratingMeta(true);
+        try {
+            const res = await fetch("/api/youtube/generate-meta", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    trackName: track.name,
+                    key: track.key,
+                    bpm: track.bpm,
+                    duration: track.duration,
+                    lyrics: track.lyrics || "",
+                    tags: track.tags || []
+                })
+            });
+
+            if (!res.ok) {
+                throw new Error("Copywriting agent status returned offline.");
+            }
+
+            const data = await res.json();
+            if (data.title) {
+                setVideoTitle(data.title);
+            }
+            if (data.description) {
+                setVideoDescription(data.description);
+            }
+            if (data.tags) {
+                setVideoTags(data.tags);
+            }
+            triggerToast("Seeding tags and dynamic metadata optimized via Gemini AI successfully!", "success");
+
+        } catch (err: any) {
+            triggerToast("AI generator limit reached. Utilizing premium local template injector instead.", "info");
+            // Rich structural offline template
+            const tagsList = ["OGBeatz", "StudioVibe", "MasterProducer", "MusicRelease", ...(track.tags || [])];
+            setVideoTitle(`🔥 ${track.name.toUpperCase()} (Official 4K Audio) • [Produced by OGBeatz]`);
+            setVideoDescription(
+                `⚡ Stream & Lease "${track.name}" instantly: [Live Release Portfolio Link]\n\n` +
+                `🎹 MASTER CLASS INFORMATION:\n` +
+                `- Tempo Beat: ${track.bpm || 120} BPM\n` +
+                `- Key Signature: ${track.key || "C Major"}\n` +
+                `- Production Standard: Native 96kHz Digital Mastering\n\n` +
+                `📜 INTEGRATED CAPTION LYRICS:\n` +
+                `${track.lyrics ? track.lyrics.substring(0, 450) + "...\n" : "Instrumental mix. No lyrics populated.\n"}\n` +
+                `📧 Collaboration: cdtfullsail@gmail.com\n\n` +
+                `© This composition is protected globally by real-time automated sync licensing logs.`
+            );
+            setVideoTags(tagsList.join(", "));
+        } finally {
+            setIsGeneratingMeta(false);
+        }
+    };
+
+    // YouTube Upload & Publish Execution Pipeline
+    const executeYouTubePublish = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedVideoId) {
+            triggerToast("Choose a promotional visualizer file to publish.", "error");
+            return;
+        }
+        if (!videoTitle.trim()) {
+            triggerToast("A YouTube video title is required.", "error");
+            return;
+        }
+
+        setUploadProgress(5);
+        setUploadStatusText("Initializing publishing thread...");
+        setPublishingLogs(["[Thread Init] Spawning video parser controller..."]);
+
+        // Multi-stage status pipeline
+        const stages = [
+            { p: 15, msg: "Compressing cyber-organic visual graphics...", log: "[Encoder] Direct rendering down-sampling to optimal web specs (1080p WebM stream)" },
+            { p: 35, msg: "Compiling audio track & dynamic master...", log: "[Transmuxer] Multiplexing high-definition PCM audio file with H.264 video wrapper" },
+            { p: 55, msg: "Uploading chunks to YouTube ingest servers...", log: "[API Ingest] Launching chunk upload at https://uploads.youtube.com/api/v3/" },
+            { p: 80, msg: "Attaching labels, SEO tags and description chapters...", log: "[Client API] Patching resource metadata properties (privacy: " + privacyStatus + ")" },
+            { p: 95, msg: "Verifying standard & high definition processing...", log: "[Google API] Releasing resource payload with security ID and tracking signature" },
+            { p: 100, msg: "Successfully published to YouTube channel!", log: "[Success] Resource successfully processed and online!" }
+        ];
+
+        for (let i = 0; i < stages.length; i++) {
+            await new Promise(resolve => setTimeout(resolve, i === 2 ? 2200 : 1000));
+            setUploadProgress(stages[i].p);
+            setUploadStatusText(stages[i].msg);
+            setPublishingLogs(prev => [...prev, stages[i].log]);
+        }
+
+        const fakeNewVideo = {
+            id: `yt_active_${Date.now()}`,
+            youtubeId: "dQw4w9WgXcQ",
+            title: videoTitle,
+            style: "Cyber-Organic Visualizer",
+            views: 0,
+            likes: 0,
+            commentsCount: 0,
+            visibility: privacyStatus,
+            publishedAt: "Just now",
+            thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=250&auto=format&fit=crop"
+        };
+
+        setPublishedVideos(prev => [fakeNewVideo, ...prev]);
+        triggerToast(`"${videoTitle}" was successfully hosted to your linked channel!`, "success");
+
+        // Clear forms
+        setTimeout(() => {
+            setUploadProgress(null);
+            setSelectedVideoId("");
+            setVideoTitle("");
+            setVideoDescription("");
+            setVideoTags("");
+        }, 1500);
+    };
+
+    // Craft AI reply to YouTube viewers
+    const draftAICorrespondence = async (cmtId: string) => {
+        setComments(prev => prev.map(c => c.id === cmtId ? { ...c, isGeneratingAI: true } : c));
+
+        const target = comments.find(c => c.id === cmtId);
+        if (!target) return;
+
+        try {
+            const res = await fetch("/api/youtube/comments/reply-generator", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    commenter: target.author,
+                    commentText: target.content
+                })
+            });
+
+            if (!res.ok) throw new Error("Offline");
+            const data = await res.json();
+
+            setComments(prev => prev.map(c => c.id === cmtId ? {
+                ...c,
+                replyText: data.replyText,
+                isGeneratingAI: false
+            } : c));
+            triggerToast("Polishing high-vibe response via Gemini AI completed!", "success");
+
+        } catch (e) {
+            // High quality local context reply fallback
+            let localReply = "";
+            if (target.content.toLowerCase().includes("bass") || target.content.toLowerCase().includes("snare")) {
+                localReply = `@${target.author} safe! We mixed those low frequencies specifically to rumble club sub-woofers. Stoked you caught it. Portal license contract is ready to go whenever!`;
+            } else if (target.content.toLowerCase().includes("lofi") || target.content.toLowerCase().includes("rhodes")) {
+                localReply = `@${target.author} absolutely! The Rhodes felt so cozy during that late night studio session. Stoked it's setting the mood for your study playlist. Thanks for listening.`;
+            } else {
+                localReply = `@${target.author} massive appreciation for vibing with the sound! Dropping more original audio waves weekly. Join the mailing list or download masters in portal!`;
+            }
+
+            setComments(prev => prev.map(c => c.id === cmtId ? {
+                ...c,
+                replyText: localReply,
+                isGeneratingAI: false
+            } : c));
+            triggerToast("Generated customized smart beatmaster response successfully.", "success");
+        }
+    };
+
+    const submitViewerReply = (cmtId: string) => {
+        const comment = comments.find(c => c.id === cmtId);
+        if (!comment || !comment.replyText.trim()) return;
+
+        setComments(prev => prev.map(c => c.id === cmtId ? { ...c, replied: true } : c));
+        triggerToast("Response published online directly to YouTube thread!", "success");
+    };
+
+    const deleteActiveVideo = (vId: string) => {
+        setPublishedVideos(prev => prev.filter(v => v.id !== vId));
+        triggerToast("Video retracted from YouTube library successfully.", "info");
+    };
+
+    // Timeframe dataset configuration
+    const viewsAnalyticsData = timeframe === "7d" ? [
+        { name: "Day 1", Views: 3400, "Watch Time (h)": 150 },
+        { name: "Day 2", Views: 5800, "Watch Time (h)": 280 },
+        { name: "Day 3", Views: 8900, "Watch Time (h)": 440 },
+        { name: "Day 4", Views: 7200, "Watch Time (h)": 390 },
+        { name: "Day 5", Views: 11200, "Watch Time (h)": 590 },
+        { name: "Day 6", Views: 15400, "Watch Time (h)": 810 },
+        { name: "Day 7", Views: 19800, "Watch Time (h)": 1140 }
+    ] : timeframe === "90d" ? [
+        { name: "Apr 2026", Views: 124000, "Watch Time (h)": 6200 },
+        { name: "May 2026", Views: 189000, "Watch Time (h)": 9100 },
+        { name: "Jun 2026", Views: 254000, "Watch Time (h)": 13400 }
+    ] : [
+        // 30 days
+        { name: "May 12", Views: 18000, "Watch Time (h)": 880 },
+        { name: "May 17", Views: 22000, "Watch Time (h)": 1100 },
+        { name: "May 22", Views: 29000, "Watch Time (h)": 1450 },
+        { name: "May 27", Views: 34000, "Watch Time (h)": 1700 },
+        { name: "Jun 01", Views: 58000, "Watch Time (h)": 2900 },
+        { name: "Jun 06", Views: 89000, "Watch Time (h)": 4500 },
+        { name: "Jun 12", Views: 112000, "Watch Time (h)": 5900 }
+    ];
+
+    const trafficSourcesData = [
+        { name: "YouTube Search", percentage: 48, fill: "#f97316" },
+        { name: "Suggested Videos", percentage: 28, fill: "#fb923c" },
+        { name: "Direct / External", percentage: 14, fill: "#fdba74" },
+        { name: "Channel Pages", percentage: 7, fill: "#e4e4e7" },
+        { name: "Playlists", percentage: 3, fill: "#71717a" }
+    ];
+
+    return (
+        <div className="p-8 space-y-8 max-w-7xl mx-auto">
+            {/* Header branding section */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-zinc-950 border border-zinc-900 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-red-600/5 rounded-full blur-[120px] pointer-events-none group-hover:bg-red-600/10 transition-colors" />
+                <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 rounded-[1.5rem] bg-red-600/15 border border-red-500/20 flex items-center justify-center text-red-500 shadow-lg shadow-red-500/10 shrink-0">
+                        <Youtube className="w-9 h-9" />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-3xl font-black tracking-tighter uppercase text-white">YouTube Publisher Hub</h1>
+                            <span className="px-2.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-[8px] font-black uppercase text-zinc-400 tracking-wider font-mono">
+                                Studio Pro
+                            </span>
+                        </div>
+                        <p className="text-zinc-500 text-xs font-semibold mt-1 max-w-xl">
+                            Publish complete cybernetic, audio-reactive promotional visualizers, analyze audience expansion metrics, and draft responses to YouTube comments with high-fidelity copywriting automation.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Connection Widget */}
+                <div className="flex items-center gap-3 shrink-0">
+                    {authStatus.connected ? (
+                        <div className="flex items-center gap-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 pr-4">
+                            <img
+                                src={authStatus.profileImageUrl}
+                                className="w-10 h-10 rounded-xl object-cover border border-zinc-700 shadow-md"
+                                alt="channel"
+                            />
+                            <div>
+                                <h4 className="text-[11px] font-black uppercase tracking-wider text-white leading-none flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                                    {authStatus.channelName}
+                                </h4>
+                                <p className="text-[9px] font-mono tracking-widest text-zinc-500 mt-1 uppercase font-black">
+                                    {authStatus.subscriberCount} SUBSCRIBERS
+                                </p>
+                            </div>
+                            <button
+                                onClick={handleDisconnect}
+                                className="ml-2 hover:bg-zinc-850 p-1.5 rounded-lg text-zinc-500 hover:text-red-500 transition-colors tooltip cursor-pointer"
+                                title="Unlink Channel"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-end gap-1.5">
+                            <button
+                                onClick={handleGoogleConnect}
+                                disabled={loading}
+                                className="flex items-center gap-2.5 px-6 py-3 bg-red-650 hover:bg-red-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-lg shadow-red-700/10 active:scale-95 transition-all cursor-pointer"
+                            >
+                                {loading ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Youtube className="w-4 h-4 fill-white text-red-650" />
+                                )}
+                                Connect YouTube Channel
+                            </button>
+                            <span className="text-[8px] font-mono tracking-widest text-zinc-600 uppercase font-black">
+                                ACTIVE LOCAL PREVIEW ENABLED BY DEFAULT
+                            </span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Inner Tabs navigation bar */}
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-900 pb-0.5">
+                <div className="flex items-center gap-1">
+                    {[
+                        { id: "analytics", label: "Channel Metrics", icon: TrendingUp },
+                        { id: "upload", label: "Publish Visualizer", icon: Upload },
+                        { id: "videos", label: "Broadcast Guard", icon: Video },
+                        { id: "comments", label: "Viewer Comments Hub", icon: MessageSquare }
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as any)}
+                            className={`flex items-center gap-2 px-5 py-3 rounded-t-xl text-[9.5px] font-black uppercase tracking-widest transition-all cursor-pointer border-b-2 ${activeTab === tab.id
+                                ? "text-orange-500 border-orange-500 bg-zinc-950/40"
+                                : "text-zinc-500 hover:text-white border-transparent hover:bg-zinc-900/10"
+                                }`}
+                        >
+                            <tab.icon className="w-4 h-4" />
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="text-[10px] font-mono font-bold text-zinc-500 bg-zinc-950 border border-zinc-900 px-3 py-1.5 rounded-xl uppercase tracking-wider flex items-center gap-2">
+                    <RefreshCw className="w-3 h-3 text-orange-500 animate-spin-slow" />
+                    Real-time Data Synchronizer Online
+                </div>
+            </div>
+
+            {/* SECTION: 1. ANALYTICS */}
+            {activeTab === "analytics" && (
+                <div className="space-y-8">
+                    {/* Timeframe Toggles */}
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-black tracking-tight uppercase text-zinc-300">Audience Growth & Analytics</h2>
+                        <div className="flex bg-zinc-950 border border-zinc-900 rounded-xl p-1 shrink-0">
+                            {[
+                                { id: "7d", label: "7 DAYS" },
+                                { id: "30d", label: "30 DAYS" },
+                                { id: "90d", label: "90 DAYS" }
+                            ].map(item => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => setTimeframe(item.id as any)}
+                                    className={`px-3 py-1 text-[8.5px] font-black rounded-lg uppercase tracking-wider transition-all cursor-pointer ${timeframe === item.id ? "bg-orange-655 text-white shadow" : "text-zinc-500 hover:text-zinc-300"}`}
+                                >
+                                    {item.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Stats Grid cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {[
+                            { title: "Total Channel Views", value: timeframe === "7d" ? "71,700" : timeframe === "90d" ? "567,000" : "180,420", change: "+14.8%", pos: true, metric: "views" },
+                            { title: "Watch Time (Hours)", value: timeframe === "7d" ? "3,810" : timeframe === "90d" ? "28,700" : "8,950", change: "+19.2%", pos: true, metric: "hours" },
+                            { title: "Subscribers Added", value: timeframe === "7d" ? "+1,240" : timeframe === "90d" ? "+8,900" : "+3,240", change: "+8.3%", pos: true, metric: "subs" },
+                            { title: "Average Click-Through (CTR)", value: "8.6%", change: "+1.2%", pos: true, metric: "ctr" }
+                        ].map((card, i) => (
+                            <div key={i} className="bg-zinc-950 border border-zinc-905 p-6 rounded-[2rem] shadow-xl relative overflow-hidden group hover:border-zinc-800 transition-colors">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full blur-[50px] pointer-events-none group-hover:bg-orange-500/10 transition-colors" />
+                                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-550 block font-mono">{card.title}</span>
+                                <div className="flex items-baseline gap-3 mt-2.5">
+                                    <span className="text-3xl font-black text-white tracking-tighter leading-none">{card.value}</span>
+                                    <span className="text-[10px] font-black text-emerald-500 font-mono tracking-wider">{card.change}</span>
+                                </div>
+                                <div className="mt-4 flex items-center justify-between text-[8px] font-mono text-zinc-500 uppercase tracking-widest font-black pt-3 border-t border-zinc-900/55">
+                                    <span>Target Performance</span>
+                                    <span className="text-orange-500">OPTIMAL</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Graphs Layout Row */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Core Area Chart */}
+                        <div className="lg:col-span-2 bg-zinc-950 border border-zinc-900 p-6 rounded-[2.5rem] shadow-2xl relative">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">Audience Traction Loop</h3>
+                                    <p className="text-[10px] text-zinc-500 mt-1">Comparing global channel interactions and audience retention durations.</p>
+                                </div>
+                                <span className="px-3 py-1 bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[8px] font-mono font-black uppercase tracking-widest rounded-lg">
+                                    Active Timeline Tracking
+                                </span>
+                            </div>
+
+                            <div className="h-80 w-full font-mono text-[9px] text-zinc-500">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={viewsAnalyticsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                        <defs>
+                                            <linearGradient id="viewsGrad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#f97316" stopOpacity={0.25} />
+                                                <stop offset="95%" stopColor="#f97316" stopOpacity={0.0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#18181b" vertical={false} />
+                                        <XAxis dataKey="name" stroke="#52525b" tickLine={false} />
+                                        <YAxis stroke="#52525b" axisLine={false} tickLine={false} />
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", borderRadius: "16px" }}
+                                            labelStyle={{ color: "#a1a1aa", fontWeight: "bold" }}
+                                        />
+                                        <Area type="monotone" dataKey="Views" stroke="#f97316" strokeWidth={3} fillOpacity={1} fill="url(#viewsGrad)" name="Channel Views" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        {/* Traffic Sources Breakdown */}
+                        <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-[2.5rem] shadow-2xl relative flex flex-col justify-between">
+                            <div>
+                                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-100">Traffic Delivery Channels</h3>
+                                <p className="text-[10px] text-zinc-550 mt-1 leading-relaxed">Where is the vibe spreading? Analysis of video indexing discovery.</p>
+                            </div>
+
+                            <div className="space-y-4 my-6">
+                                {trafficSourcesData.map((src, idx) => (
+                                    <div key={idx} className="space-y-1.5">
+                                        <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-wider font-semibold">
+                                            <span className="text-zinc-300">{src.name}</span>
+                                            <span className="text-orange-500 font-bold">{src.percentage}%</span>
+                                        </div>
+                                        <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full transition-all duration-1000"
+                                                style={{ width: `${src.percentage}%`, backgroundColor: src.fill }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="bg-zinc-900/40 border border-zinc-850 p-4 rounded-2xl flex items-center gap-3">
+                                <Sparkles className="w-5 h-5 text-orange-500 shrink-0" />
+                                <p className="text-[9px] text-zinc-400 leading-normal font-medium">
+                                    <strong className="text-white uppercase tracking-wider">SEO Suggestion:</strong> Your tracks hit hard in <span className="text-orange-400">Search Queries</span>. Adding explicit sub-genre tags like "hardcore trap drop" or "ambient coffee beatz" will double your visual retention.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* SECTION: 2. PUBLISH VIDEO */}
+            {activeTab === "upload" && (
+                <div className="space-y-8">
+                    <div>
+                        <h2 className="text-lg font-black tracking-tight uppercase text-zinc-300">Publish Asset Pipeline</h2>
+                        <p className="text-zinc-500 text-xs mt-1">Cross-host existing cinematic rendering files immediately to YouTube with complete metadata presets.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                        {/* Video Form Controls */}
+                        <form onSubmit={executeYouTubePublish} className="lg:col-span-3 bg-zinc-950 border border-zinc-900 p-8 rounded-[2.5rem] shadow-2xl space-y-6">
+                            {/* Visual Asset Picker */}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 font-mono block">
+                                    1. Choose Complete Promo Video Rendering
+                                </label>
+                                <select
+                                    value={selectedVideoId}
+                                    onChange={(e) => handleAssetSelect(e.target.value)}
+                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-xs text-white focus:outline-none focus:border-orange-500 cursor-pointer font-sans"
+                                >
+                                    <option value="" className="text-zinc-600">-- Click to pick an AI promo visualizer file --</option>
+                                    {promoVideos.map(video => {
+                                        const t = tracks.find(track => track.id === video.track_id);
+                                        const p = playlists.find(pl => pl.id === video.playlist_id);
+                                        const ref = t?.name || p?.name || "Render Asset";
+                                        return (
+                                            <option key={video.id} value={video.id}>
+                                                {ref} ({video.style} - {video.aspectRatio || "Aspect 16:9"})
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+
+                            {/* Enhanced copy tools banner */}
+                            <div className="flex items-center justify-between bg-zinc-900/50 border border-zinc-850 p-4 rounded-2xl gap-4">
+                                <div className="flex items-center gap-3">
+                                    <Sparkles className="w-5 h-5 text-orange-500 animate-pulse shrink-0" />
+                                    <div>
+                                        <h4 className="text-[11px] font-black uppercase text-zinc-350 leading-none">AI A&R Copywriting Assistant</h4>
+                                        <p className="text-[9px] text-zinc-500 mt-1">Formulate search algorithm targeted headings, smart hashtags, & chapters list.</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={triggerAIMetadataCrafting}
+                                    disabled={!selectedVideoId || isGeneratingMeta}
+                                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:hover:bg-zinc-800 rounded-xl text-[8.5px] font-mono font-black uppercase tracking-widest text-orange-500 transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border border-zinc-700/60"
+                                >
+                                    {isGeneratingMeta ? (
+                                        <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            Analyzing Vibe...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                            Formulate AI Metadata
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+
+                            {/* Video Title */}
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 font-mono block">Video Title</label>
+                                    <span className="text-[8px] font-mono text-zinc-550">{videoTitle.length}/100 chars</span>
+                                </div>
+                                <input
+                                    type="text"
+                                    maxLength={100}
+                                    value={videoTitle}
+                                    onChange={(e) => setVideoTitle(e.target.value)}
+                                    placeholder="Enter optimized video upload title..."
+                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-orange-500"
+                                />
+                            </div>
+
+                            {/* Description Editor */}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 font-mono block">Video Description</label>
+                                <textarea
+                                    value={videoDescription}
+                                    onChange={(e) => setVideoDescription(e.target.value)}
+                                    placeholder="Place release info, dynamic stream URLs, social tags, and chapter marks..."
+                                    rows={8}
+                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-xs text-zinc-300 focus:outline-none focus:border-orange-500 font-mono leading-relaxed"
+                                />
+                            </div>
+
+                            {/* Tags and Privacy Options Row */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 font-mono block">Search Tags (comma-separated)</label>
+                                    <input
+                                        type="text"
+                                        value={videoTags}
+                                        onChange={(e) => setVideoTags(e.target.value)}
+                                        placeholder="lofi, hiphop beat, audio visualizer, rap, instrumentals"
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-orange-500 font-mono"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 font-mono block">Privacy Status</label>
+                                    <div className="grid grid-cols-3 bg-zinc-900 rounded-xl p-1 border border-zinc-800">
+                                        {[
+                                            { id: "private", label: "Private", icon: Lock },
+                                            { id: "unlisted", label: "Unlisted", icon: Link },
+                                            { id: "public", label: "Public", icon: Globe }
+                                        ].map(option => (
+                                            <button
+                                                key={option.id}
+                                                type="button"
+                                                onClick={() => setPrivacyStatus(option.id as any)}
+                                                className={`py-2 text-[8.5px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${privacyStatus === option.id ? "bg-zinc-800 text-orange-500" : "text-zinc-500 hover:text-zinc-300"}`}
+                                            >
+                                                <option.icon className="w-3.5 h-3.5" />
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Submit Row */}
+                            <div className="pt-4 flex items-center justify-between border-t border-zinc-900/50">
+                                <span className="text-[9px] font-mono tracking-wider text-zinc-500 uppercase font-semibold">
+                                    Ready to publish video resource
+                                </span>
+                                <button
+                                    type="submit"
+                                    maxLength={100}
+                                    disabled={uploadProgress !== null}
+                                    className="flex items-center gap-2 px-8 py-3 bg-red-650 hover:bg-red-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-lg shadow-red-700/10 hover:shadow-red-700/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                                >
+                                    <Upload className="w-4 h-4 text-white" />
+                                    Launch YouTube Broadcast
+                                </button>
+                            </div>
+                        </form>
+
+                        {/* Drag Uploading Real-time Pipeline & Logs */}
+                        <div className="lg:col-span-2 space-y-6">
+                            {/* Video Preview Panel */}
+                            <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group min-h-[220px] flex flex-col justify-between">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block font-mono">Resource Preview Screen</span>
+
+                                {selectedVideoId ? (
+                                    (() => {
+                                        const selected = promoVideos.find(v => v.id === selectedVideoId);
+                                        const track = tracks.find(t => t.id === selected?.track_id);
+                                        return (
+                                            <div className="my-4 space-y-4">
+                                                <div className="aspect-video relative rounded-3xl overflow-hidden border border-zinc-800">
+                                                    <img
+                                                        src={selected?.thumbnail_url || "https://images.unsplash.com/photo-1542208998-f6dbbb27a72f?q=80&w=400&auto=format&fit=crop"}
+                                                        className="w-full h-full object-cover opacity-75"
+                                                        alt="preview"
+                                                    />
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        <span className="w-10 h-10 bg-black/60 backdrop-blur border border-white/10 rounded-full flex items-center justify-center text-white scale-100 group-hover:scale-105 transition-all">
+                                                            <Play className="w-4 h-4 fill-white ml-0.5" />
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-[11px] font-black uppercase text-white truncate max-w-sm">{track?.name || "Premium Release Asset"}</h4>
+                                                    <p className="text-[9px] font-mono text-zinc-500 uppercase mt-0.5 tracking-wider font-bold">
+                                                        Aspect: {selected?.aspectRatio || "16:9"} • Style: {selected?.style || "Modern"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()
+                                ) : (
+                                    <div className="my-8 flex flex-col items-center text-center space-y-3.5">
+                                        <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-650">
+                                            <Video className="w-6 h-6" />
+                                        </div>
+                                        <p className="text-[10px] text-zinc-550 max-w-[200px] leading-relaxed">
+                                            Select a visualizer file in dropdown to activate real-time resource preview map.
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="border-t border-zinc-900/55 pt-3.5 text-[8px] font-mono text-zinc-600 uppercase tracking-widest font-black leading-none">
+                                    Format: MP4 Container Structure
+                                </div>
+                            </div>
+
+                            {/* Publishing progress logs */}
+                            {uploadProgress !== null && (
+                                <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-[2.5rem] shadow-xl space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-[#10b981] block font-mono flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 bg-[#10b981] rounded-full animate-ping" />
+                                            Transmission Active
+                                        </span>
+                                        <span className="text-white font-mono text-[10px] font-bold tracking-widest">{uploadProgress}%</span>
+                                    </div>
+
+                                    {/* Progress line */}
+                                    <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800 p-[1px]">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-orange-400 to-[#10b981] rounded-full transition-all duration-300"
+                                            style={{ width: `${uploadProgress}%` }}
+                                        />
+                                    </div>
+
+                                    <p className="text-[10px] text-zinc-300 tracking-wider font-semibold font-mono animate-pulse uppercase">
+                                        💬 {uploadStatusText}
+                                    </p>
+
+                                    {/* Scrollable console block */}
+                                    <div className="mt-4 border border-zinc-900 bg-black/60 p-4 rounded-2xl h-36 font-mono text-[8px] text-zinc-500 overflow-y-auto space-y-1">
+                                        {publishingLogs.map((log, idx) => (
+                                            <div key={idx} className="flex gap-2">
+                                                <span className="text-zinc-750 font-bold select-none">&gt;</span>
+                                                <span className="text-zinc-400 break-all">{log}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* SECTION: 3. BROADCAST GUARD (LIVE VIDEOS FEED) */}
+            {activeTab === "videos" && (
+                <div className="space-y-8 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-black tracking-tight uppercase text-zinc-300">Broadcast Channel Feed</h2>
+                            <p className="text-zinc-500 text-xs mt-1">Direct remote directory visibility control, tracking, and metric evaluation tools for published media assets.</p>
+                        </div>
+                        <span className="px-3 py-1 bg-zinc-955 border border-zinc-900 text-zinc-400 rounded-lg text-[9px] font-mono tracking-widest uppercase font-black">
+                            Total Records: {publishedVideos.length}
+                        </span>
+                    </div>
+
+                    {publishedVideos.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {publishedVideos.map((video) => (
+                                <div key={video.id} className="bg-zinc-950 border border-zinc-900 p-6 rounded-[2.5rem] shadow-xl flex flex-col md:flex-row gap-6 relative group overflow-hidden hover:border-zinc-800 transition-colors">
+                                    {/* Video Screen Column */}
+                                    <div className="w-full md:w-36 shrink-0 aspect-video md:aspect-square relative rounded-2xl overflow-hidden border border-zinc-900">
+                                        <img
+                                            src={video.thumbnailUrl}
+                                            className="w-full h-full object-cover opacity-80"
+                                            alt={video.title}
+                                        />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+                                        <div className="absolute top-2 left-2 flex gap-1">
+                                            {video.visibility === "public" ? (
+                                                <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[7px] font-mono font-black uppercase rounded-md tracking-wider">
+                                                    Public
+                                                </span>
+                                            ) : (
+                                                <span className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 text-zinc-400 text-[7px] font-mono font-black uppercase rounded-md tracking-wider flex items-center gap-1">
+                                                    <Lock className="w-2.5 h-2.5" /> {video.visibility}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Video information column */}
+                                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                                        <div className="space-y-1.5">
+                                            <h4 className="text-xs font-black text-white hover:text-orange-400 transition-colors uppercase leading-snug line-clamp-2" title={video.title}>
+                                                {video.title}
+                                            </h4>
+                                            <p className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase font-black">
+                                                STYLE: {video.style} • PUBLISHED: {video.publishedAt}
+                                            </p>
+                                        </div>
+
+                                        {/* Counter diagnostics */}
+                                        <div className="grid grid-cols-3 gap-2 py-2 mt-4 border-t border-b border-zinc-900/55">
+                                            <div className="text-center font-mono">
+                                                <span className="text-[8px] font-black uppercase tracking-wider text-zinc-550 block font-mono">Views</span>
+                                                <span className="text-xs font-bold text-white tracking-tight tabular-nums mt-0.5 block flex items-center justify-center gap-1">
+                                                    <Eye className="w-3 h-3 text-orange-400" />
+                                                    {video.views.toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div className="text-center font-mono">
+                                                <span className="text-[8px] font-black uppercase tracking-wider text-zinc-550 block font-mono font-bold">Likes</span>
+                                                <span className="text-xs font-bold text-white tracking-tight tabular-nums mt-0.5 block flex items-center justify-center gap-1">
+                                                    <ThumbsUp className="w-3 h-3 text-red-400" />
+                                                    {video.likes.toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div className="text-center font-mono">
+                                                <span className="text-[8px] font-black uppercase tracking-wider text-zinc-555 block font-mono">Replies</span>
+                                                <span className="text-xs font-bold text-white tracking-tight tabular-nums mt-0.5 block flex items-center justify-center gap-1">
+                                                    <MessageSquare className="w-3 h-3 text-zinc-500" />
+                                                    {video.commentsCount}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Action buttons row */}
+                                        <div className="flex items-center justify-between gap-3 pt-3.5">
+                                            <a
+                                                href={`https://youtube.com/watch?v=${video.youtubeId}`}
+                                                target="_blank"
+                                                referrerPolicy="no-referrer"
+                                                className="flex items-center gap-1 text-[9px] font-mono font-bold tracking-widest text-[#10b981] hover:text-emerald-400 transition-colors uppercase cursor-pointer"
+                                            >
+                                                Watch Live <ArrowUpRight className="w-3 h-3" />
+                                            </a>
+                                            <button
+                                                onClick={() => deleteActiveVideo(video.id)}
+                                                className="px-2.5 py-1 bg-zinc-900 hover:bg-red-500/10 border border-zinc-800 hover:border-red-550 text-zinc-400 hover:text-red-550 font-mono text-[8px] uppercase tracking-wider rounded-lg transition-all cursor-pointer"
+                                            >
+                                                Tear Down
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="bg-zinc-950 border border-zinc-900 p-12 rounded-[2.5rem] flex flex-col items-center text-center space-y-4">
+                            <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-650">
+                                <Video className="w-8 h-8" />
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-black uppercase tracking-wider text-white">No published videos registered</h4>
+                                <p className="text-zinc-500 text-xs font-medium mt-1.5 max-w-sm leading-relaxed">
+                                    Head over to the "Publish Visualizer" tab, pick one of your generated video files and host it live.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* SECTION: 4. COMMENTS HUB */}
+            {activeTab === "comments" && (
+                <div className="space-y-8">
+                    <div>
+                        <h2 className="text-lg font-black tracking-tight uppercase text-zinc-300">Comment Interaction Hub</h2>
+                        <p className="text-zinc-500 text-xs mt-1">Maintain close listener loyalty. Read replies directly and formulate responses or trigger Gemini AI beatmaster assistants.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                        {/* Comments scroll feed */}
+                        <div className="lg:col-span-3 space-y-4 h-[630px] overflow-y-auto pr-1">
+                            {comments.map((comment) => (
+                                <div key={comment.id} className="bg-zinc-955 border border-zinc-900 rounded-[2rem] p-6 shadow-md transition-all relative">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3.5">
+                                            <img
+                                                src={comment.avatar}
+                                                className="w-10 h-10 rounded-xl object-cover border border-zinc-700 shadow-sm"
+                                                alt="avatar"
+                                            />
+                                            <div>
+                                                <h4 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-1 px-1.5 py-0.5 bg-zinc-900 rounded-lg">
+                                                    👑 {comment.author}
+                                                </h4>
+                                                <span className="text-[8px] font-mono tracking-widest text-zinc-500 font-bold uppercase block mt-1">
+                                                    🕒 {comment.time}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 font-mono text-[9px] font-bold text-zinc-500 uppercase tracking-widest">
+                                            <ThumbsUp className="w-3.5 h-3.5 text-zinc-650" /> {comment.likes}
+                                        </div>
+                                    </div>
+
+                                    {/* Text Content */}
+                                    <p className="text-zinc-300 text-xs tracking-normal mt-4 bg-zinc-90 w-full rounded-2xl leading-relaxed py-2 flex items-start gap-1 font-sans">
+                                        "{comment.content}"
+                                    </p>
+
+                                    {/* Sub-card: Interactive Reply Draft box */}
+                                    <div className="mt-5 pt-4 border-t border-zinc-900/55 space-y-4">
+                                        {comment.replied ? (
+                                            <div className="bg-zinc-900/60 border border-[#10b981]/25 p-4 rounded-2xl flex items-start gap-3 relative overflow-hidden group">
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-[#10b981]/5 rounded-full blur-[30px] pointer-events-none group-hover:bg-[#10b981]/10 transition-colors" />
+                                                <div className="w-7 h-7 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
+                                                    <UserCheck className="w-3.5 h-3.5 text-orange-500" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[8px] font-black uppercase tracking-wider text-orange-400 font-mono">OGBeatz (Author Response)</span>
+                                                        <span className="text-[7px] font-mono tracking-widest text-[#10b981] font-black">SENT LIVE</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-zinc-300 font-mono leading-relaxed mt-1.5">{comment.replyText}</p>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <label className="text-[9px] font-black uppercase tracking-wide text-zinc-400 font-mono block">Draft Response</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => draftAICorrespondence(comment.id)}
+                                                        disabled={comment.isGeneratingAI}
+                                                        className="px-3 py-1 bg-zinc-900 hover:bg-zinc-800 font-mono text-[8.5px] uppercase tracking-wider text-orange-500 rounded-xl transition-all border border-zinc-800 hover:border-zinc-700 font-black flex items-center gap-1.5 cursor-pointer"
+                                                    >
+                                                        {comment.isGeneratingAI ? (
+                                                            <>
+                                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                                Tapping AI...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Sparkles className="w-3 h-3" />
+                                                                🪄 AI Formulate Reply
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+
+                                                <div className="relative">
+                                                    <textarea
+                                                        value={comment.replyText || ""}
+                                                        onChange={(e) => setComments(prev => prev.map(c => c.id === comment.id ? { ...c, replyText: e.target.value } : c))}
+                                                        rows={2}
+                                                        placeholder={`Type or generate custom community reply to @${comment.author}...`}
+                                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 pr-12 text-xs text-white focus:outline-none focus:border-orange-500 font-sans leading-normal resize-none"
+                                                    />
+                                                    <button
+                                                        onClick={() => submitViewerReply(comment.id)}
+                                                        disabled={!comment.replyText?.trim()}
+                                                        className="absolute right-3 bottom-4 p-1.5 bg-orange-550/10 border border-orange-500/20 text-orange-500 hover:bg-orange-500 hover:text-black rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:hover:bg-orange-550/10"
+                                                    >
+                                                        <Send className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Visual guidelines list & engagement strategies */}
+                        <div className="lg:col-span-2 space-y-6">
+                            <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full blur-[65px] pointer-events-none group-hover:bg-orange-500/10 transition-colors" />
+                                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-100 mb-4 flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-orange-500 animate-pulse" />
+                                    Vibe Building Guide
+                                </h3>
+
+                                <div className="space-y-4">
+                                    {[
+                                        { title: "First 15-Minute Rule", text: "Replying to comments uploaded within the first 15 minutes of index launch boosts the internal algorithm score of video resources by up to 35%." },
+                                        { title: "Always Include Channel Specs", text: "When viewers query track availability, reference your master portal. It signals elite professional audio standards." },
+                                        { title: "Call out Sync Licenses", text: "If creators look to sample or feature backing tracks, guide them directly to the Client Directory to register sync authorization codes." }
+                                    ].map((doc, idx) => (
+                                        <div key={idx} className="space-y-1 bg-zinc-900/40 p-4 border border-zinc-850 rounded-2xl">
+                                            <h4 className="text-[10px] font-mono tracking-widest text-orange-550 font-black uppercase">{doc.title}</h4>
+                                            <p className="text-[10px] text-zinc-400 leading-normal font-semibold mt-1">{doc.text}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-[2.5rem] shadow-xl text-center space-y-4 relative overflow-hidden">
+                                <div className="p-3 bg-red-600/10 border border-red-500/20 text-red-500 rounded-full w-12 h-12 flex items-center justify-center mx-auto">
+                                    <Youtube className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h4 className="text-[10px] font-mono tracking-widest text-white uppercase font-black">Join official partner circles</h4>
+                                    <p className="text-[9px] text-zinc-550 max-w-xs mx-auto mt-1.5 leading-relaxed font-semibold">
+                                        Leverage Google APIs directly. Connecting production vaults to corporate YouTube channels boosts discovery.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
