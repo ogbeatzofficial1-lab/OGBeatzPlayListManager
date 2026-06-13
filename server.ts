@@ -33,6 +33,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Let Express trust proxy headers (X-Forwarded-Proto, X-Forwarded-Host) for Cloud Run, Render, etc.
+  app.set("trust proxy", true);
+
   // Middleware
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -1016,7 +1019,11 @@ Rules:
   // 2. Generate Google OAuth URL
   app.get("/api/youtube/auth-url", (req, res) => {
     const oClientId = process.env.GOOGLE_CLIENT_ID || "";
-    const origin = req.headers.origin || `http://localhost:3000`;
+    const rawProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "http";
+    const protocol = rawProto.split(",")[0].trim();
+    const rawHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || req.headers.host || "localhost:3000";
+    const host = rawHost.split(",")[0].trim();
+    const origin = `${protocol}://${host}`;
     const redirectUri = `${origin}/api/youtube/callback`;
 
     if (!oClientId) {
@@ -1052,7 +1059,11 @@ Rules:
       };
     } else {
       try {
-        const origin = `${req.protocol}://${req.headers.host}`;
+        const rawProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "http";
+        const protocol = rawProto.split(",")[0].trim();
+        const rawHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || req.headers.host || "localhost:3000";
+        const host = rawHost.split(",")[0].trim();
+        const origin = `${protocol}://${host}`;
         const redirectUri = `${origin}/api/youtube/callback`;
         const exchangeRes = await fetch("https://oauth2.googleapis.com/token", {
           method: "POST",
