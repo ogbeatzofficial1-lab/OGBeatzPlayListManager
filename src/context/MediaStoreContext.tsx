@@ -343,11 +343,26 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       if (cached) {
         const parsed = JSON.parse(cached) as Track[];
         if (parsed && parsed.length > 0) {
-          // If the cached list contains old mock entries like 'Tokyo Drift Vibe', discard the entire cache to purge old residues
-          const carriesOldResidue = parsed.some(t => t.id === "11111111-1111-1111-1111-111111111111" || t.name === "Tokyo Drift Vibe" || t.name === "Midnight Coffee");
-          if (!carriesOldResidue) {
-            return parsed;
-          }
+          // Filter out ONLY specific old mock tracks, completely preserving any custom uploaded tracks!
+          const cleaned = parsed.filter(t => 
+            t.id !== "11111111-1111-1111-1111-111111111111" && 
+            t.id !== "22222222-2222-2222-2222-222222222222" && 
+            t.id !== "33333333-3333-3333-3333-333333333333" && 
+            t.id !== "44444444-4444-4444-4444-444444444444" &&
+            t.name !== "Tokyo Drift Vibe" && 
+            t.name !== "Midnight Coffee" && 
+            t.name !== "Chrome Plated" && 
+            t.name !== "Acoustic Sunset"
+          );
+          
+          // Merge custom tracks with the new MOCK_TRACKS
+          const merged = [...MOCK_TRACKS];
+          cleaned.forEach(ct => {
+            if (!merged.some(m => m.id === ct.id || m.name?.toLowerCase() === ct.name?.toLowerCase())) {
+              merged.push(ct);
+            }
+          });
+          return merged;
         }
       }
       return MOCK_TRACKS;
@@ -362,11 +377,21 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       if (cached) {
         const parsed = JSON.parse(cached) as Playlist[];
         if (parsed && parsed.length > 0) {
-          // If the cached list contains old mock playlists, discard
-          const carriesOldResidue = parsed.some(p => p.id === "55555555-5555-5555-5555-555555555555" || p.name === "Unreleased Master Vol. 1");
-          if (!carriesOldResidue) {
-            return parsed;
-          }
+          // Filter out ONLY old mock playlists
+          const cleaned = parsed.filter(p => 
+            p.id !== "55555555-5555-5555-5555-555555555555" && 
+            p.id !== "66666666-6666-6666-6666-666666666666" &&
+            p.name !== "Unreleased Master Vol. 1" &&
+            p.name !== "Late Night Chill Sessions"
+          );
+          
+          const merged = [...MOCK_PLAYLISTS];
+          cleaned.forEach(cp => {
+            if (!merged.some(m => m.id === cp.id || m.name?.toLowerCase() === cp.name?.toLowerCase())) {
+              merged.push(cp);
+            }
+          });
+          return merged;
         }
       }
       return MOCK_PLAYLISTS;
@@ -381,8 +406,21 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && parsed.length > 0) {
-          const carriesOldResidue = parsed.some((c: any) => c.name === "Marcus Cole");
-          if (!carriesOldResidue) return parsed;
+          // Filter out ONLY old mock clients
+          const cleaned = parsed.filter((c: any) => 
+            c.id !== "77777777-7777-7777-7777-777777777777" && 
+            c.id !== "88888888-8888-8888-8888-888888888888" &&
+            c.name !== "Marcus Cole" &&
+            c.name !== "Sarah Jenkins"
+          );
+          
+          const merged = [...MOCK_CLIENTS];
+          cleaned.forEach((cc: any) => {
+            if (!merged.some(m => m.id === cc.id || m.email?.toLowerCase() === cc.email?.toLowerCase())) {
+              merged.push(cc);
+            }
+          });
+          return merged;
         }
       }
       return MOCK_CLIENTS;
@@ -397,8 +435,22 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && parsed.length > 0) {
-          const carriesOldResidue = parsed.some((a: any) => a.target === "Tokyo Drift Vibe");
-          if (!carriesOldResidue) return parsed;
+          // Filter out ONLY old mock activities
+          const cleaned = parsed.filter((a: any) => 
+            a.id !== "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1" && 
+            a.id !== "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2" && 
+            a.id !== "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3" &&
+            a.target !== "Tokyo Drift Vibe" &&
+            a.target !== "Midnight Coffee"
+          );
+          
+          const merged = [...MOCK_ACTIVITIES];
+          cleaned.forEach((ca: any) => {
+            if (!merged.some(m => m.id === ca.id)) {
+              merged.push(ca);
+            }
+          });
+          return merged;
         }
       }
       return MOCK_ACTIVITIES;
@@ -422,8 +474,21 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && parsed.length > 0) {
-          const carriesOldResidue = parsed.some((m: any) => m.content && m.content.includes("Tokyo Drift Vibe"));
-          if (!carriesOldResidue) return parsed;
+          // Filter out ONLY old mock messages
+          const cleaned = parsed.filter((m: any) => 
+            m.id !== "99999999-9999-9999-9999-999999999991" && 
+            m.id !== "99999999-9999-9999-9999-999999999992" && 
+            m.id !== "99999999-9999-9999-9999-999999999993" &&
+            !(m.content && m.content.includes("Tokyo Drift Vibe"))
+          );
+          
+          const merged = [...MOCK_MESSAGES];
+          cleaned.forEach((cm: any) => {
+            if (!merged.some(m => m.id === cm.id || (m.content === cm.content && m.timestamp === cm.timestamp))) {
+              merged.push(cm);
+            }
+          });
+          return merged;
         }
       }
       return MOCK_MESSAGES;

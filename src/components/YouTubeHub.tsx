@@ -47,6 +47,9 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
     // View States
     const [activeTab, setActiveTab] = useState<"analytics" | "upload" | "videos" | "comments">("analytics");
     const [loading, setLoading] = useState(false);
+    const [showOAuthInstructions, setShowOAuthInstructions] = useState(false);
+    const [copiedOrigin, setCopiedOrigin] = useState(false);
+    const [copiedCallback, setCopiedCallback] = useState(false);
     const [authStatus, setAuthStatus] = useState<{
         connected: boolean;
         channelName?: string;
@@ -542,6 +545,127 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* Google Console OAuth Setup Directions */}
+            <div className="bg-zinc-950 border border-zinc-900 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/5 rounded-full blur-[80px] pointer-events-none" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-orange-500/10 border border-orange-500/25 text-orange-500 rounded-xl shrink-0">
+                            <Lock className="w-4 h-4 text-orange-500" />
+                        </div>
+                        <div>
+                            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-150">
+                                Google Cloud Console OAuth 2.0 Credentials
+                            </h3>
+                            <p className="text-[10px] text-zinc-500 mt-1">
+                                Complete setup directions to authenticate with real YouTube channels.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setShowOAuthInstructions(!showOAuthInstructions)}
+                        className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-[9.5px] text-zinc-300 font-bold uppercase tracking-widest rounded-xl border border-zinc-800 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                        <span>{showOAuthInstructions ? "Hide Directions" : "Show Directions"}</span>
+                        <ArrowUpRight className={`w-3 h-3 transition-transform ${showOAuthInstructions ? "rotate-45" : ""}`} />
+                    </button>
+                </div>
+
+                {showOAuthInstructions && (
+                    <div className="mt-6 pt-6 border-t border-zinc-900 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-[10.5px]">
+                            <div className="space-y-4">
+                                <h4 className="text-[10px] font-mono font-black uppercase tracking-widest text-orange-550 flex items-center gap-1.5">
+                                    <span className="w-1 h-3 bg-orange-555 rounded" />
+                                    Step 1: Create OAuth Client Credentials
+                                </h4>
+                                <ol className="space-y-2.5 text-zinc-400 leading-relaxed font-semibold list-decimal pl-4">
+                                    <li>
+                                        Visit the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-orange-500 hover:underline inline-flex items-center gap-0.5 font-bold">Google Cloud Console <ArrowUpRight className="w-3 h-3 h-3" /></a>.
+                                    </li>
+                                    <li>
+                                        In the API Library, search for <strong className="text-zinc-200">"YouTube Data API v3"</strong> and enable it for your current GCP project workspace.
+                                    </li>
+                                    <li>
+                                        Set up your <strong className="text-zinc-200">OAuth Consent Screen</strong>. Choose External user type, specify support contact information, and add scopes for <code className="text-zinc-300 font-mono text-[9px] bg-zinc-900 px-1 py-0.5 rounded">youtube.readonly</code> and <code className="text-zinc-300 font-mono text-[9px] bg-zinc-900 px-1 py-0.5 rounded">youtube.upload</code>.
+                                    </li>
+                                    <li>
+                                        Navigate to <strong className="text-zinc-200">Credentials</strong> ➔ <strong className="text-zinc-200">Create Credentials</strong> ➔ select <strong className="text-zinc-200">OAuth client ID</strong>.
+                                    </li>
+                                    <li>
+                                        Set application type as <strong className="text-zinc-300 font-mono text-[9.5px] uppercase">"Web application"</strong>.
+                                    </li>
+                                </ol>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h4 className="text-[10px] font-mono font-black uppercase tracking-widest text-orange-550 flex items-center gap-1.5">
+                                    <span className="w-1 h-3 bg-orange-555 rounded" />
+                                    Step 2: Configure Authorized URIs
+                                </h4>
+                                <p className="text-zinc-400 leading-relaxed font-semibold">
+                                    In the <strong className="text-zinc-200">Authorized JavaScript Origins</strong> section, add the following URL:
+                                </p>
+                                <div className="flex items-center justify-between gap-3 bg-zinc-900 border border-zinc-850 rounded-xl p-2.5">
+                                    <code className="text-emerald-400 font-mono text-[9.5px] break-all select-all font-bold">
+                                        {window.location.origin}
+                                    </code>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(window.location.origin);
+                                            setCopiedOrigin(true);
+                                            setTimeout(() => setCopiedOrigin(false), 2000);
+                                            triggerToast("Origins URL copied to clipboard!", "success");
+                                        }}
+                                        className="text-[9px] font-mono font-black text-zinc-500 hover:text-white uppercase transition-colors shrink-0"
+                                    >
+                                        {copiedOrigin ? "Copied" : "Copy"}
+                                    </button>
+                                </div>
+
+                                <p className="text-zinc-400 leading-relaxed font-semibold mt-4">
+                                    In the <strong className="text-zinc-200">Authorized Redirect URIs</strong> section, add this Callback URL:
+                                </p>
+                                <div className="flex items-center justify-between gap-3 bg-zinc-900 border border-zinc-850 rounded-xl p-2.5">
+                                    <code className="text-emerald-400 font-mono text-[9.5px] break-all select-all font-bold">
+                                        {`${window.location.origin}/api/youtube/callback`}
+                                    </code>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(`${window.location.origin}/api/youtube/callback`);
+                                            setCopiedCallback(true);
+                                            setTimeout(() => setCopiedCallback(false), 2000);
+                                            triggerToast("Redirect URI copied to clipboard!", "success");
+                                        }}
+                                        className="text-[9px] font-mono font-black text-zinc-500 hover:text-white uppercase transition-colors shrink-0"
+                                    >
+                                        {copiedCallback ? "Copied" : "Copy"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-zinc-900/60 border border-zinc-850 p-5 rounded-[1.5rem] mt-6 space-y-3">
+                            <h4 className="text-[10px] font-mono font-black uppercase tracking-widest text-zinc-205 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 bg-orange-500 rounded-full" />
+                                Step 3: Link secrets to your environment (.env)
+                            </h4>
+                            <p className="text-[10px] text-zinc-400 leading-relaxed font-semibold">
+                                Copy the generated <strong className="text-zinc-200">Client ID</strong> and <strong className="text-zinc-200">Client Secret</strong>. Paste them under workspace environment metrics or in the <code className="text-zinc-300 font-mono bg-zinc-950 px-1 py-0.5 rounded">.env</code> file:
+                            </p>
+                            <pre className="bg-zinc-950 p-3.5 rounded-xl text-[9px] font-mono text-orange-400 border border-zinc-900 overflow-x-auto select-all leading-relaxed whitespace-pre font-bold">
+{`# Google Developer Console Credentials (YouTube API)
+GOOGLE_CLIENT_ID=your_gcp_oauth_client_id_here
+GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
+                            </pre>
+                            <p className="text-[9px] text-zinc-550 italic leading-normal font-semibold">
+                                *Note: Active system restarts may be required after editing variables in server environments for token configurations to bind correctly.
+                            </p>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Inner Tabs navigation bar */}
