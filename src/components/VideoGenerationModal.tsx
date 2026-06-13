@@ -322,15 +322,26 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
   const parsedLyrics = useMemo(() => {
     const lines = lyricsText.split('\n');
     const result: Array<{ time: number; text: string }> = [];
-    const timeReg = /\[(\d+):(\d+)\]/;
+    const timeRegGlobal = /\[(\d+):(\d+)(?:\.(\d+))?\]/g;
     let lastTime = 0;
     for (const line of lines) {
-      const match = line.match(timeReg);
-      if (match) {
-        const mins = parseInt(match[1], 10);
-        const secs = parseInt(match[2], 10);
-        const timeVal = mins * 60 + secs;
-        const textVal = line.replace(timeReg, '').trim();
+      const matches: RegExpExecArray[] = [];
+      let match: RegExpExecArray | null;
+      timeRegGlobal.lastIndex = 0;
+      while ((match = timeRegGlobal.exec(line)) !== null) {
+        matches.push(match);
+      }
+
+      if (matches.length > 0) {
+        // Always use the first/earliest timestamp representing the absolute timeline position (e.g., [00:26] over [00:00])
+        const chosenMatch = matches[0];
+        const mins = parseInt(chosenMatch[1], 10);
+        const secs = parseInt(chosenMatch[2], 10);
+        const ms = chosenMatch[3] ? parseInt(chosenMatch[3], 10) / 100 : 0;
+        const timeVal = mins * 60 + secs + ms;
+        
+        // Strip out all bracketed timestamps from the lyric line text
+        const textVal = line.replace(timeRegGlobal, '').trim();
         result.push({ time: timeVal, text: textVal });
         lastTime = timeVal;
       } else {
@@ -413,170 +424,172 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
 
       // Drawing only the Embedded Lip Sync / Dynamic Lyric Overlay for absolute purity
       if (overlayLyrics && parsedLyrics && parsedLyrics.length > 0) {
-        let activeLine = parsedLyrics[0];
+        let activeLine = null;
         for (let i = 0; i < parsedLyrics.length; i++) {
           if (time >= parsedLyrics[i].time) {
             activeLine = parsedLyrics[i];
           }
         }
         
-        ctx.save();
-        // Set styling typography parameters based on choice (retro, serif, mono, impact)
-        let fontName = '"Inter", sans-serif';
-        const fontScaleFactor = width / 640;
-        const fontSizePx = Math.max(12, Math.round(lyricFontSize * fontScaleFactor));
-        const fontSize = `${fontSizePx}px`;
-        const uppercase = lyricStyle === 'retro' || lyricStyle === 'impact';
-        
-        if (lyricStyle === 'retro') {
-          fontName = '"Space Grotesk", sans-serif';
-          ctx.font = `${lyricFontWeight} italic ${fontSize} ${fontName}`;
-          ctx.fillStyle = lyricColor || '#f97316';
-          ctx.shadowColor = lyricColor || '#f97316';
-          ctx.shadowBlur = Math.round(18 * fontScaleFactor);
-        } else if (lyricStyle === 'serif') {
-          fontName = '"Playfair Display", serif';
-          ctx.font = `italic ${lyricFontWeight} ${fontSize} ${fontName}`;
-          ctx.fillStyle = lyricColor || '#ffffff';
-          ctx.shadowColor = 'rgba(0,0,0,0.7)';
-          ctx.shadowBlur = Math.round(12 * fontScaleFactor);
-        } else if (lyricStyle === 'mono') {
-          fontName = '"JetBrains Mono", monospace';
-          ctx.font = `${lyricFontWeight} ${fontSize} ${fontName}`;
-          ctx.fillStyle = lyricColor || '#10b981';
-          ctx.shadowColor = lyricColor || '#10b981';
-          ctx.shadowBlur = Math.round(14 * fontScaleFactor);
-        } else {
-          fontName = '"Inter", sans-serif';
-          ctx.font = `${lyricFontWeight} ${fontSize} ${fontName}`;
-          ctx.fillStyle = lyricColor || '#ffffff';
-          ctx.shadowColor = 'rgba(0,0,0,0.9)';
-          ctx.shadowBlur = Math.round(15 * fontScaleFactor);
-        }
-        
-        ctx.textAlign = 'center';
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = Math.max(3, Math.round(8 * fontScaleFactor));
-        
-        let displayText = uppercase ? activeLine.text.toUpperCase() : activeLine.text;
-        
-        let scaleEffect = 1.0;
-        let opacity = 1.0;
-        let translateY = 0;
-        const timeDelta = time - activeLine.time;
-        let drawTextLines: string[] = [];
-
-        // Dynamic formatting transitions
-        if (lyricFormat === 'word') {
-          const rawWords = activeLine.text.split(/\s+/).filter(Boolean);
-          if (rawWords.length > 0) {
-            let lineDuration = 4.0;
-            const activeIndex = parsedLyrics.indexOf(activeLine);
-            if (activeIndex !== -1 && activeIndex < parsedLyrics.length - 1) {
-              lineDuration = Math.max(1.0, parsedLyrics[activeIndex + 1].time - activeLine.time);
-            }
-            
-            // Highlight active word
-            const wordRatio = Math.min(0.99, timeDelta / lineDuration);
-            const wordIndex = Math.min(rawWords.length - 1, Math.floor(wordRatio * rawWords.length));
-            const activeWord = uppercase ? rawWords[wordIndex].toUpperCase() : rawWords[wordIndex];
-            
-            // Pop transition for individual flashing word
-            const wordDuration = lineDuration / rawWords.length;
-            const wordTimeDelta = timeDelta % wordDuration;
-            const t = Math.min(1.0, wordTimeDelta / Math.min(0.18, wordDuration));
-            scaleEffect = 0.85 + Math.sin(t * Math.PI * 0.5) * 0.22;
-            opacity = 1.0;
-            drawTextLines = [activeWord];
+        if (activeLine) {
+          ctx.save();
+          // Set styling typography parameters based on choice (retro, serif, mono, impact)
+          let fontName = '"Inter", sans-serif';
+          const fontScaleFactor = width / 640;
+          const fontSizePx = Math.max(12, Math.round(lyricFontSize * fontScaleFactor));
+          const fontSize = `${fontSizePx}px`;
+          const uppercase = lyricStyle === 'retro' || lyricStyle === 'impact';
+          
+          if (lyricStyle === 'retro') {
+            fontName = '"Space Grotesk", sans-serif';
+            ctx.font = `${lyricFontWeight} italic ${fontSize} ${fontName}`;
+            ctx.fillStyle = lyricColor || '#f97316';
+            ctx.shadowColor = lyricColor || '#f97316';
+            ctx.shadowBlur = Math.round(18 * fontScaleFactor);
+          } else if (lyricStyle === 'serif') {
+            fontName = '"Playfair Display", serif';
+            ctx.font = `italic ${lyricFontWeight} ${fontSize} ${fontName}`;
+            ctx.fillStyle = lyricColor || '#ffffff';
+            ctx.shadowColor = 'rgba(0,0,0,0.7)';
+            ctx.shadowBlur = Math.round(12 * fontScaleFactor);
+          } else if (lyricStyle === 'mono') {
+            fontName = '"JetBrains Mono", monospace';
+            ctx.font = `${lyricFontWeight} ${fontSize} ${fontName}`;
+            ctx.fillStyle = lyricColor || '#10b981';
+            ctx.shadowColor = lyricColor || '#10b981';
+            ctx.shadowBlur = Math.round(14 * fontScaleFactor);
           } else {
-            drawTextLines = [''];
+            fontName = '"Inter", sans-serif';
+            ctx.font = `${lyricFontWeight} ${fontSize} ${fontName}`;
+            ctx.fillStyle = lyricColor || '#ffffff';
+            ctx.shadowColor = 'rgba(0,0,0,0.9)';
+            ctx.shadowBlur = Math.round(15 * fontScaleFactor);
           }
-        } else {
-          // Bounded multi-line wrapping layer to prevent closed captions from bleeding off-canvas
-          const maxWidth = width * 0.82;
-          const words = displayText.split(' ');
-          let currentLine = '';
+          
+          ctx.textAlign = 'center';
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = Math.max(3, Math.round(8 * fontScaleFactor));
+          
+          let displayText = uppercase ? activeLine.text.toUpperCase() : activeLine.text;
+          
+          let scaleEffect = 1.0;
+          let opacity = 1.0;
+          let translateY = 0;
+          const timeDelta = time - activeLine.time;
+          let drawTextLines: string[] = [];
 
-          for (let i = 0; i < words.length; i++) {
-            const word = words[i];
-            const testLine = currentLine ? currentLine + ' ' + word : word;
-            const testWidth = ctx.measureText(testLine).width;
-            if (testWidth > maxWidth && i > 0) {
+          // Dynamic formatting transitions
+          if (lyricFormat === 'word') {
+            const rawWords = activeLine.text.split(/\s+/).filter(Boolean);
+            if (rawWords.length > 0) {
+              let lineDuration = 4.0;
+              const activeIndex = parsedLyrics.indexOf(activeLine);
+              if (activeIndex !== -1 && activeIndex < parsedLyrics.length - 1) {
+                lineDuration = Math.max(1.0, parsedLyrics[activeIndex + 1].time - activeLine.time);
+              }
+              
+              // Highlight active word
+              const wordRatio = Math.min(0.99, timeDelta / lineDuration);
+              const wordIndex = Math.min(rawWords.length - 1, Math.floor(wordRatio * rawWords.length));
+              const activeWord = uppercase ? rawWords[wordIndex].toUpperCase() : rawWords[wordIndex];
+              
+              // Pop transition for individual flashing word
+              const wordDuration = lineDuration / rawWords.length;
+              const wordTimeDelta = timeDelta % wordDuration;
+              const t = Math.min(1.0, wordTimeDelta / Math.min(0.18, wordDuration));
+              scaleEffect = 0.85 + Math.sin(t * Math.PI * 0.5) * 0.22;
+              opacity = 1.0;
+              drawTextLines = [activeWord];
+            } else {
+              drawTextLines = [''];
+            }
+          } else {
+            // Bounded multi-line wrapping layer to prevent closed captions from bleeding off-canvas
+            const maxWidth = width * 0.82;
+            const words = displayText.split(' ');
+            let currentLine = '';
+
+            for (let i = 0; i < words.length; i++) {
+              const word = words[i];
+              const testLine = currentLine ? currentLine + ' ' + word : word;
+              const testWidth = ctx.measureText(testLine).width;
+              if (testWidth > maxWidth && i > 0) {
+                drawTextLines.push(currentLine);
+                currentLine = word;
+              } else {
+                currentLine = testLine;
+              }
+            }
+            if (currentLine) {
               drawTextLines.push(currentLine);
-              currentLine = word;
-            } else {
-              currentLine = testLine;
             }
-          }
-          if (currentLine) {
-            drawTextLines.push(currentLine);
-          }
 
-          if (lyricFormat === 'slide') {
-            const slideDuration = 0.45;
-            if (timeDelta < slideDuration) {
-              const t = timeDelta / slideDuration;
-              const ease = 1 - Math.pow(1 - t, 3); // Cubic ease out
-              translateY = (1 - ease) * (fontSizePx * 1.0);
-              opacity = Math.min(1.0, t * 1.5);
-            } else {
-              translateY = 0;
-              opacity = 1.0;
-            }
-            scaleEffect = 1.0;
-          } else if (lyricFormat === 'fade') {
-            const fadeDuration = 0.35;
-            if (timeDelta < fadeDuration) {
-              opacity = timeDelta / fadeDuration;
-            } else {
-              opacity = 1.0;
-            }
-            scaleEffect = 1.0;
-          } else if (lyricFormat === 'zoom') {
-            const zoomDuration = 0.5;
-            if (timeDelta < zoomDuration) {
-              const t = timeDelta / zoomDuration;
-              scaleEffect = 1.35 - t * 0.35;
-              opacity = t;
-            } else {
-              const drift = timeDelta - zoomDuration;
-              scaleEffect = 1.0 + Math.min(0.04, drift * 0.003);
-              opacity = 1.0;
-            }
-          } else {
-            // Default: 'bounce' Style
-            const bounceDuration = 0.5;
-            if (timeDelta < bounceDuration) {
-              const t = timeDelta / bounceDuration;
-              scaleEffect = 0.70 + Math.sin(t * Math.PI * 1.4) * 0.35 * (1 - t);
-              opacity = Math.min(1.0, t * 1.5);
-            } else {
+            if (lyricFormat === 'slide') {
+              const slideDuration = 0.45;
+              if (timeDelta < slideDuration) {
+                const t = timeDelta / slideDuration;
+                const ease = 1 - Math.pow(1 - t, 3); // Cubic ease out
+                translateY = (1 - ease) * (fontSizePx * 1.0);
+                opacity = Math.min(1.0, t * 1.5);
+              } else {
+                translateY = 0;
+                opacity = 1.0;
+              }
               scaleEffect = 1.0;
-              opacity = 1.0;
+            } else if (lyricFormat === 'fade') {
+              const fadeDuration = 0.35;
+              if (timeDelta < fadeDuration) {
+                opacity = timeDelta / fadeDuration;
+              } else {
+                opacity = 1.0;
+              }
+              scaleEffect = 1.0;
+            } else if (lyricFormat === 'zoom') {
+              const zoomDuration = 0.5;
+              if (timeDelta < zoomDuration) {
+                const t = timeDelta / zoomDuration;
+                scaleEffect = 1.35 - t * 0.35;
+                opacity = t;
+              } else {
+                const drift = timeDelta - zoomDuration;
+                scaleEffect = 1.0 + Math.min(0.04, drift * 0.003);
+                opacity = 1.0;
+              }
+            } else {
+              // Default: 'bounce' Style
+              const bounceDuration = 0.5;
+              if (timeDelta < bounceDuration) {
+                const t = timeDelta / bounceDuration;
+                scaleEffect = 0.70 + Math.sin(t * Math.PI * 1.4) * 0.35 * (1 - t);
+                opacity = Math.min(1.0, t * 1.5);
+              } else {
+                scaleEffect = 1.0;
+                opacity = 1.0;
+              }
             }
           }
+
+          // Place text in precise dynamic quadrant
+          const lyricY = aspect === 'vertical' ? height * 0.58 : height * 0.60;
+          
+          ctx.globalAlpha = opacity;
+          ctx.translate(width / 2, lyricY + translateY);
+          ctx.scale(scaleEffect, scaleEffect);
+
+          const lineHeight = fontSizePx * lyricLineHeight; // Comfortable leading for multi-line subtitles
+          const totalHeight = (drawTextLines.length - 1) * lineHeight;
+          const startY = -totalHeight / 2; // Harmonious balance: center lines on the target vertical coordinate
+
+          for (let i = 0; i < drawTextLines.length; i++) {
+            const lineY = startY + i * lineHeight;
+            ctx.strokeText(drawTextLines[i], 0, lineY);
+            ctx.fillText(drawTextLines[i], 0, lineY);
+          }
+          
+          ctx.restore();
         }
-
-        // Place text in precise dynamic quadrant
-        const lyricY = aspect === 'vertical' ? height * 0.58 : height * 0.60;
-        
-        ctx.globalAlpha = opacity;
-        ctx.translate(width / 2, lyricY + translateY);
-        ctx.scale(scaleEffect, scaleEffect);
-
-        const lineHeight = fontSizePx * lyricLineHeight; // Comfortable leading for multi-line subtitles
-        const totalHeight = (drawTextLines.length - 1) * lineHeight;
-        const startY = -totalHeight / 2; // Harmonious balance: center lines on the target vertical coordinate
-
-        for (let i = 0; i < drawTextLines.length; i++) {
-          const lineY = startY + i * lineHeight;
-          ctx.strokeText(drawTextLines[i], 0, lineY);
-          ctx.fillText(drawTextLines[i], 0, lineY);
-        }
-        
-        ctx.restore();
+        return;
       }
-      return;
     }
 
     // Aspect-ratio layout adaptive coordinates and sizes to make sure it adjusts to ratio perfectly
@@ -915,7 +928,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
 
     // 6. Embedded Lip Sync / Dynamic Lyric Overlay
     if (overlayLyrics && parsedLyrics && parsedLyrics.length > 0) {
-      let activeLine = parsedLyrics[0];
+      let activeLine = null;
       for (let i = 0; i < parsedLyrics.length; i++) {
         if (time >= parsedLyrics[i].time) {
           activeLine = parsedLyrics[i];
@@ -2457,48 +2470,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                               <div className="flex items-center justify-between border-b border-zinc-900/55 pb-2">
                                 <span className="text-[9px] font-black uppercase tracking-[0.15em] text-zinc-400 font-mono">Timed Lyrics Console</span>
                                 <div className="flex flex-wrap items-center gap-1.5 justify-end">
-                                  {/* Original "Keep Em' Thirsty" Master template button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const perfect = `[00:00] (Intro - Pure black silence. Deep vinyl crackle fills the audio space.)
-[00:03] Look,
-[00:04] If you give them the well, they take the ocean.
-[00:08] Give them a drop, they stay in motion.
-[00:15] Yeah, let them look.
-[00:18] Never let them drown, just give them a sip. / Keep the glass full, but don't let it drip.
-[00:26] They want the whole cake, I leave them a crumb. / Staring at the throne, wondering when it's going to come.
-[00:35] I hand them the drought, I rule the empire, they dying in the heat, I'm lighting the fire,
-[00:39] Never give them too much, let them beg on their knees, if you want the top shelf, gotta pay for the squeeze.
-[00:43] Keep them thirsty, hold up, yeah. / Yeah, keep them thirsty.
-[00:50] They want the blueprint, want the whole map, / Want the secret formula wrapped in the rap, I'm a master class,
-[00:55] They just sitting in the back, signing NDAs before I show them where it's at,
-[00:58] I'm the oasis but I came with the spikes, they chasing the shadows, I'm blinding the lights,
-[01:02] Paid my dues and from now on I'm collecting the tax, you floating on trends, I'm cementing the facts,
-[01:06] They taste me like 'please', I leave them all read, hungry for the crown but they getting misled,
-[01:10] I'm the supplier, the plug and the source, running this game like a dark-colored horse,
-[01:14] They want a bucket, I give them a spoon, leave them in the dark while I howl at the moon.
-[01:21] Never let them drown, just give them a sip. / Keep the glass full, but don't let it drip.
-[01:29] They want the whole cake, I leave them a crumb. / Staring at the throne, wondering when it's going to come.
-[01:38] I hand them the drought, I rule the empire, they dying in the heat, I'm lighting the fire,
-[01:42] Never give them too much, let them beg on their knees, if you want the top shelf, gotta pay for the squeeze. Keep them thirsty, hold up, yeah. Yeah, keep them thirsty.
-[01:52] Look at the drip, they dying of dehydration, I'm the main event, they the whole imitation, / Try to duplicate this but the copy is blurred, I don't even have to speak, they just hang on the word,
-[02:00] I got the reservoir locked in the vault, if your career is dry, that's your internal fault,
-[02:04] They out here chasing the stream, I'm controlling the tide, nowhere to run from and nowhere to hide.
-[02:11] Shh, listen.
-[02:13] They want a piece of the pie, tell them to bake it, / Want a spot at the table, tell them to take it, they can't,
-[02:18] So they sit and they stare, I'm the smoke in the room, I'm the chill in the air.
-[02:27] Pour it up, shut it down, let them look, let them try.
-[02:31] Pour it up, shut it down, look them straight in the eye.
-[02:35] You want the water? You gotta pray to flow. / You want the fire? I'm consuming the whole.`;
-                                      setLyricsText(perfect);
-                                      setLyricsStatusMsg("Loaded verbatim 'Keep Em' Thirsty' master lyric sequence.");
-                                      addToast?.("Loaded 'Keep Em' Thirsty' official lyrics preset.", "success");
-                                    }}
-                                    className="flex items-center gap-1 py-1 px-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[8px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-orange-500/10"
-                                  >
-                                    👑 Original Script
-                                  </button>
+
 
                                   {/* AI lyrics writer button */}
                                   <button

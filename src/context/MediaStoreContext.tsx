@@ -111,36 +111,6 @@ const MOCK_TRACKS: Track[] = [
     image_url: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300&auto=format&fit=crop",
     plays: 981,
     likes: 412,
-    lyrics: `[00:00] (Intro - Pure black silence. Deep vinyl crackle fills the audio space.)
-[00:03] Look,
-[00:04] If you give them the well, they take the ocean.
-[00:08] Give them a drop, they stay in motion.
-[00:15] Yeah, let them look.
-[00:18] Never let them drown, just give them a sip. / Keep the glass full, but don't let it drip.
-[00:26] They want the whole cake, I leave them a crumb. / Staring at the throne, wondering when it's going to come.
-[00:35] I hand them the drought, I rule the empire, they dying in the heat, I'm lighting the fire,
-[00:39] Never give them too much, let them beg on their knees, if you want the top shelf, gotta pay for the squeeze.
-[00:43] Keep them thirsty, hold up, yeah. / Yeah, keep them thirsty.
-[00:50] They want the blueprint, want the whole map, / Want the secret formula wrapped in the rap, I'm a master class,
-[00:55] They just sitting in the back, signing NDAs before I show them where it's at,
-[00:58] I'm the oasis but I came with the spikes, they chasing the shadows, I'm blinding the lights,
-[01:02] Paid my dues and from now on I'm collecting the tax, you floating on trends, I'm cementing the facts,
-[01:06] They taste me like 'please', I leave them all read, hungry for the crown but they getting misled,
-[01:10] I'm the supplier, the plug and the source, running this game like a dark-colored horse,
-[01:14] They want a bucket, I give them a spoon, leave them in the dark while I howl at the moon.
-[01:21] Never let them drown, just give them a sip. / Keep the glass full, but don't let it drip.
-[01:29] They want the whole cake, I leave them a crumb. / Staring at the throne, wondering when it's going to come.
-[01:38] I hand them the drought, I rule the empire, they dying in the heat, I'm lighting the fire,
-[01:42] Never give them too much, let them beg on their knees, if you want the top shelf, gotta pay for the squeeze. Keep them thirsty, hold up, yeah. Yeah, keep them thirsty.
-[01:52] Look at the drip, they dying of dehydration, I'm the main event, they the whole imitation, / Try to duplicate this but the copy is blurred, I don't even have to speak, they just hang on the word,
-[02:00] I got the reservoir locked in the vault, if your career is dry, that's your internal fault,
-[02:04] They out here chasing the stream, I'm controlling the tide, nowhere to run from and nowhere to hide.
-[02:11] Shh, listen.
-[02:13] They want a piece of the pie, tell them to bake it, / Want a spot at the table, tell them to take it, they can't,
-[02:18] So they sit and they stare, I'm the smoke in the room, I'm the chill in the air.
-[02:27] Pour it up, shut it down, let them look, let them try.
-[02:31] Pour it up, shut it down, look them straight in the eye.
-[02:35] You want the water? You gotta pray to flow. / You want the fire? I'm consuming the whole.`,
     created_at: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString()
   },
   {
@@ -175,14 +145,6 @@ const MOCK_TRACKS: Track[] = [
     image_url: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=300&auto=format&fit=crop",
     plays: 412,
     likes: 195,
-    lyrics: `[00:00] (Soft organic lofi crackle, smooth warm keyboard loop)
-[00:05] Steam rises slow from the porcelain cup
-[00:11] Coffee steam dancing, keeping my emotions up
-[00:17] Relaxing thoughts crafted by OGbeatz in my brain
-[00:24] Gently washing off any stress or lingering pain
-[00:31] Feel the cozy vinyl crackle turning around
-[00:36] Lost inside this late night chill lo-fi sound
-[00:45] (Outro - Soft cafe ambience fades to silence)`,
     created_at: new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
   },
   {
@@ -1712,123 +1674,53 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     const cleanName = name.replace(/\.[^/.]+$/, ""); // Remove extension
     const duration = clientDuration || (120 + (cleanName.length * 3) % 111);
 
-    try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: name, duration })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data && typeof data.bpm === 'number' && typeof data.key === 'string' && Array.isArray(data.tags)) {
-          if (data.isFallback) {
-            addToast(`Offline heuristic analysis loaded: ${data.fallbackReason || 'Gemini limits active.'}`, 'info');
-          } else {
-            addToast("AI Analysis completed successfully via Gemini on the server!", 'success');
-          }
-          
-          // Build combined tags with vocal/instrumental indicator and SEO keywords
-          const typeTag = data.instrumental ? "Instrumental" : "Vocal Track";
-          const rawKeywords: string[] = Array.isArray(data.seo_keywords) ? data.seo_keywords : [];
-          // clean keywords to be shorter tags
-          const seoTags = rawKeywords.map(k => k.length > 20 ? k.substring(0, 18) + '...' : k);
-          const combinedTags = [
-            typeTag,
-            `camelot_key:${data.camelot_key || ""}`,
-            `genre_category:${data.genre_category || ""}`,
-            `mood:${data.mood || ""}`,
-            `vibe:${data.vibe || ""}`,
-            `instruments:${(data.primary_instruments || []).join(', ')}`,
-            `pitch:${data.pitch || ""}`,
-            ...data.tags,
-            ...seoTags
-          ].filter((v, i, a) => a.indexOf(v) === i && v !== "camelot_key:" && v !== "genre_category:" && v !== "mood:" && v !== "vibe:" && v !== "instruments:" && v !== "pitch:"); // deduplicate & filter empty
-          
-          // Return the key with Camelot key integrated if present
-          const fullKey = data.camelot_key ? `${data.key} (${data.camelot_key})` : data.key;
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: name, duration })
+    });
 
-          return {
-            bpm: data.bpm,
-            key: fullKey,
-            duration,
-            tags: combinedTags
-          };
-        }
-      }
-    } catch (e: any) {
-      console.warn("Could not reach server-side Gemini analyzer, performing offline heuristic fallback:", e.message);
+    if (!response.ok) {
+      throw new Error(`AI Analysis server returned status ${response.status}`);
     }
 
-    const cleanLower = cleanName.toLowerCase();
-
-    // 1. BPM Heuristic
-    let bpm = 120;
-    const bpmMatch = cleanLower.match(/(\d{2,3})\s*(?:bpm|BPM)/);
-    if (bpmMatch) {
-      bpm = parseInt(bpmMatch[1], 10);
-    } else {
-      const numbers = cleanLower.match(/\b\d{2,3}\b/g);
-      if (numbers) {
-        for (const numStr of numbers) {
-          const num = parseInt(numStr, 10);
-          if (num >= 60 && num <= 200) {
-            bpm = num;
-            break;
-          }
-        }
-      }
+    const data = await response.json();
+    
+    if (data && data.isFallback) {
+      throw new Error(`AI Provider is currently unavailable. Heuristic fallbacks are disabled to prevent mock data: ${data.fallbackReason || 'Gemini limit active.'}`);
     }
 
-    // 2. Key Signature Heuristic
-    let key = "C Major";
-    const standardKeys = [
-      "Am", "Bm", "Cm", "Dm", "Em", "Fm", "Gm",
-      "A#m", "C#m", "D#m", "F#m", "G#m",
-      "Abm", "Bbm", "Ebm",
-      "A", "B", "C", "D", "E", "F", "G",
-      "A#", "C#", "D#", "F#", "G#"
-    ];
-    const sortedKeys = [...standardKeys].sort((a, b) => b.length - a.length);
-    const words = cleanName.split(/[\s_\-\[\]\(\)]+/);
-    for (const word of words) {
-      if (sortedKeys.includes(word)) {
-        key = word;
-        break;
-      }
-      const matchedKey = sortedKeys.find(k => k.toLowerCase() === word.toLowerCase());
-      if (matchedKey) {
-        key = matchedKey;
-        break;
-      }
+    if (!data || typeof data.bpm !== 'number' || typeof data.key !== 'string' || !Array.isArray(data.tags)) {
+      throw new Error("Invalid response format received from AI Provider");
     }
 
-    // 4. Tags Heuristic
-    const tags: string[] = [];
-    const genreKeywords = [
-      { keys: ["trap", "808"], tags: ["Trap", "Dark", "Heavy"] },
-      { keys: ["drill", "grime", "uk"], tags: ["Drill", "Aggressive", "Gritty"] },
-      { keys: ["lofi", "lo-fi", "chillhop", "study"], tags: ["Lofi", "Chill", "Relaxed"] },
-      { keys: ["boombap", "boom bap", "90s", "eastcoast"], tags: ["BoomBap", "Classic", "Groovy"] },
-      { keys: ["chill", "ambient", "cloud", "smooth"], tags: ["Chill", "Ambient", "Smooth"] },
-      { keys: ["guitar", "acoustic", "guitarra"], tags: ["Acoustic", "Melodic", "Organic"] },
-      { keys: ["piano", "keys", "emotional", "sad"], tags: ["Piano", "Emotional", "Soulful"] },
-      { keys: ["synth", "retro", "wave", "cyber"], tags: ["Synth", "Futuristic", "Electronic"] },
-      { keys: ["soul", "r&b", "rb", "motown"], tags: ["R&B", "Soulful", "Smooth"] },
-      { keys: ["pop", "upbeat", "dance", "synthpop"], tags: ["Pop", "Upbeat", "Dance"] }
-    ];
+    addToast("AI Analysis completed successfully via Gemini on the server!", 'success');
+    
+    // Build combined tags with vocal/instrumental indicator and SEO keywords
+    const typeTag = data.instrumental ? "Instrumental" : "Vocal Track";
+    const rawKeywords: string[] = Array.isArray(data.seo_keywords) ? data.seo_keywords : [];
+    const seoTags = rawKeywords.map(k => k.length > 20 ? k.substring(0, 18) + '...' : k);
+    const combinedTags = [
+      typeTag,
+      `camelot_key:${data.camelot_key || ""}`,
+      `genre_category:${data.genre_category || ""}`,
+      `mood:${data.mood || ""}`,
+      `vibe:${data.vibe || ""}`,
+      `instruments:${(data.primary_instruments || []).join(', ')}`,
+      `pitch:${data.pitch || ""}`,
+      ...data.tags,
+      ...seoTags
+    ].filter((v, i, a) => a.indexOf(v) === i && v !== "camelot_key:" && v !== "genre_category:" && v !== "mood:" && v !== "vibe:" && v !== "instruments:" && v !== "pitch:"); // deduplicate & filter empty
+    
+    // Return the key with Camelot key integrated if present
+    const fullKey = data.camelot_key ? `${data.key} (${data.camelot_key})` : data.key;
 
-    for (const item of genreKeywords) {
-      if (item.keys.some(k => cleanLower.includes(k))) {
-        tags.push(...item.tags);
-      }
-    }
-
-    const uniqueTags = Array.from(new Set(tags)).slice(0, 4);
-    if (uniqueTags.length === 0) {
-      uniqueTags.push("Instrumental", "OGBeatz", "Producer Mode");
-    }
-
-    return { bpm, key, duration, tags: uniqueTags };
+    return {
+      bpm: Math.round(data.bpm),
+      key: fullKey,
+      duration,
+      tags: combinedTags
+    };
   };
 
   const uploadFile = async (bucket: string, file: File): Promise<string | null> => {
