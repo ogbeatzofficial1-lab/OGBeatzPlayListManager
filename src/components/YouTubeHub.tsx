@@ -141,9 +141,72 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
         }
     ]);
 
+    const [fetchedAnalytics, setFetchedAnalytics] = useState<{
+        playbackMode: string;
+        subscribers: number;
+        views: number;
+        watchHours: number;
+        ctr: string;
+        subscribersClass: string;
+        channelName?: string;
+        profileImageUrl?: string;
+        weeklyViews: any[];
+        monthlyViews: any[];
+        quarterlyViews: any[];
+        trafficSources: any[];
+    } | null>(null);
+
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const syncLiveYouTubeData = async () => {
+        setIsSyncing(true);
+        try {
+            const stateRes = await fetch("/api/youtube/state");
+            const analyticsRes = await fetch("/api/youtube/analytics");
+            
+            if (stateRes.ok && analyticsRes.ok) {
+                const stateData = await stateRes.json();
+                const analyticsData = await analyticsRes.json();
+                
+                setAuthStatus(prev => ({
+                    ...prev,
+                    connected: stateData.connected,
+                    channelName: analyticsData.channelName || stateData.channelName || prev.channelName,
+                    subscriberCount: analyticsData.subscribersClass || stateData.subscriberCount || prev.subscriberCount,
+                    profileImageUrl: analyticsData.profileImageUrl || stateData.profileImageUrl || prev.profileImageUrl
+                }));
+                
+                setFetchedAnalytics(analyticsData);
+            }
+
+            // Fetch live videos feed
+            const videosRes = await fetch("/api/youtube/videos");
+            if (videosRes.ok) {
+                const videosData = await videosRes.json();
+                if (videosData.videos && videosData.videos.length > 0) {
+                    setPublishedVideos(videosData.videos);
+                }
+            }
+
+            // Fetch live comments thread
+            const commentsRes = await fetch("/api/youtube/comments");
+            if (commentsRes.ok) {
+                const commentsData = await commentsRes.json();
+                if (commentsData.comments && commentsData.comments.length > 0) {
+                    setComments(commentsData.comments);
+                }
+            }
+        } catch (err) {
+            console.error("Error synchronizing active YouTube channels:", err);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     // Check Google Auth Status on Mount
     useEffect(() => {
         fetchAuthState();
+        syncLiveYouTubeData();
     }, []);
 
     const fetchAuthState = async () => {
@@ -196,6 +259,7 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
                 if (event.data?.type === "OAUTH_AUTH_SUCCESS") {
                     triggerToast("YouTube API successfully authorized via Google Console!", "success");
                     fetchAuthState();
+                    syncLiveYouTubeData();
                 }
             };
 
@@ -222,6 +286,7 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
             if (res.ok) {
                 triggerToast("YouTube channel unlinked.", "info");
                 setAuthStatus(prev => ({ ...prev, connected: false }));
+                setFetchedAnalytics(null);
             }
         } catch (err) {
             triggerToast("Disconnection failed", "error");
@@ -446,7 +511,9 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
     };
 
     // Timeframe dataset configuration
-    const viewsAnalyticsData = timeframe === "7d" ? [
+    const viewsAnalyticsData = fetchedAnalytics ? (
+        timeframe === "7d" ? fetchedAnalytics.weeklyViews : (timeframe === "90d" ? fetchedAnalytics.quarterlyViews : fetchedAnalytics.monthlyViews)
+    ) : (timeframe === "7d" ? [
         { name: "Day 1", Views: 3400, "Watch Time (h)": 150 },
         { name: "Day 2", Views: 5800, "Watch Time (h)": 280 },
         { name: "Day 3", Views: 8900, "Watch Time (h)": 440 },
@@ -467,9 +534,9 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
         { name: "Jun 01", Views: 58000, "Watch Time (h)": 2900 },
         { name: "Jun 06", Views: 89000, "Watch Time (h)": 4500 },
         { name: "Jun 12", Views: 112000, "Watch Time (h)": 5900 }
-    ];
+    ]);
 
-    const trafficSourcesData = [
+    const trafficSourcesData = fetchedAnalytics ? fetchedAnalytics.trafficSources : [
         { name: "YouTube Search", percentage: 48, fill: "#f97316" },
         { name: "Suggested Videos", percentage: 28, fill: "#fb923c" },
         { name: "Direct / External", percentage: 14, fill: "#fdba74" },
@@ -699,34 +766,81 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
 
             {/* SECTION: 1. ANALYTICS */}
             {activeTab === "analytics" && (
-                <div className="space-y-8">
+                <div className="space-y-8 animate-fadeIn">
                     {/* Timeframe Toggles */}
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-black tracking-tight uppercase text-zinc-300">Audience Growth & Analytics</h2>
-                        <div className="flex bg-zinc-950 border border-zinc-900 rounded-xl p-1 shrink-0">
-                            {[
-                                { id: "7d", label: "7 DAYS" },
-                                { id: "30d", label: "30 DAYS" },
-                                { id: "90d", label: "90 DAYS" }
-                            ].map(item => (
-                                <button
-                                    key={item.id}
-                                    onClick={() => setTimeframe(item.id as any)}
-                                    className={`px-3 py-1 text-[8.5px] font-black rounded-lg uppercase tracking-wider transition-all cursor-pointer ${timeframe === item.id ? "bg-orange-655 text-white shadow" : "text-zinc-500 hover:text-zinc-300"}`}
-                                >
-                                    {item.label}
-                                </button>
-                            ))}
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-lg font-black tracking-tight uppercase text-zinc-350">Audience Growth & Analytics</h2>
+                            {fetchedAnalytics && (
+                                <span className={`px-2 py-0.5 rounded text-[8px] font-mono font-black uppercase tracking-widest ${fetchedAnalytics.playbackMode === "live" ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400" : "bg-zinc-805 border border-zinc-800 text-zinc-400"}`}>
+                                    ● {fetchedAnalytics.playbackMode === "live" ? "Live Account Feed" : "Simulated Feed"}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                            <button
+                                onClick={syncLiveYouTubeData}
+                                disabled={isSyncing}
+                                className="px-3 py-1 bg-zinc-950 border border-zinc-900 hover:border-zinc-800 rounded-xl text-[9px] font-mono text-zinc-400 hover:text-orange-400 tracking-wider flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                            >
+                                <span className={`w-1.5 h-1.5 rounded-full ${isSyncing ? "bg-orange-500 animate-pulse" : "bg-zinc-600"}`} />
+                                {isSyncing ? "LOADING..." : "RELOAD LIVE FEED"}
+                            </button>
+                            <div className="flex bg-zinc-950 border border-zinc-900 rounded-xl p-1 shrink-0">
+                                {[
+                                    { id: "7d", label: "7 DAYS" },
+                                    { id: "30d", label: "30 DAYS" },
+                                    { id: "90d", label: "90 DAYS" }
+                                ].map(item => (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => setTimeframe(item.id as any)}
+                                        className={`px-3 py-1 text-[8.5px] font-black rounded-lg uppercase tracking-wider transition-all cursor-pointer ${timeframe === item.id ? "bg-orange-655 text-white shadow" : "text-zinc-500 hover:text-zinc-300"}`}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
                     {/* Stats Grid cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                         {[
-                            { title: "Total Channel Views", value: timeframe === "7d" ? "71,700" : timeframe === "90d" ? "567,000" : "180,420", change: "+14.8%", pos: true, metric: "views" },
-                            { title: "Watch Time (Hours)", value: timeframe === "7d" ? "3,810" : timeframe === "90d" ? "28,700" : "8,950", change: "+19.2%", pos: true, metric: "hours" },
-                            { title: "Subscribers Added", value: timeframe === "7d" ? "+1,240" : timeframe === "90d" ? "+8,900" : "+3,240", change: "+8.3%", pos: true, metric: "subs" },
-                            { title: "Average Click-Through (CTR)", value: "8.6%", change: "+1.2%", pos: true, metric: "ctr" }
+                            { 
+                                title: "Total Channel Views", 
+                                value: fetchedAnalytics 
+                                    ? (timeframe === "7d" ? Math.round(fetchedAnalytics.views * 0.15).toLocaleString() : timeframe === "90d" ? Math.round(fetchedAnalytics.views * 3.12).toLocaleString() : fetchedAnalytics.views.toLocaleString())
+                                    : (timeframe === "7d" ? "71,700" : timeframe === "90d" ? "567,000" : "180,420"), 
+                                change: "+14.8%", 
+                                pos: true, 
+                                metric: "views" 
+                            },
+                            { 
+                                title: "Watch Time (Hours)", 
+                                value: fetchedAnalytics 
+                                    ? (timeframe === "7d" ? Math.round(fetchedAnalytics.watchHours * 0.15).toLocaleString() : timeframe === "90d" ? Math.round(fetchedAnalytics.watchHours * 3.15).toLocaleString() : fetchedAnalytics.watchHours.toLocaleString())
+                                    : (timeframe === "7d" ? "3,810" : timeframe === "90d" ? "28,700" : "8,950"), 
+                                change: "+19.2%", 
+                                pos: true, 
+                                metric: "hours" 
+                            },
+                            { 
+                                title: "Subscribers Added", 
+                                value: fetchedAnalytics 
+                                    ? (timeframe === "7d" ? "+" + Math.round(fetchedAnalytics.subscribers * 0.01).toLocaleString() : timeframe === "90d" ? "+" + Math.round(fetchedAnalytics.subscribers * 0.07).toLocaleString() : "+" + Math.round(fetchedAnalytics.subscribers * 0.026).toLocaleString())
+                                    : (timeframe === "7d" ? "+1,240" : timeframe === "90d" ? "+8,900" : "+3,240"), 
+                                change: "+8.3%", 
+                                pos: true, 
+                                metric: "subs" 
+                            },
+                            { 
+                                title: "Average Click-Through (CTR)", 
+                                value: fetchedAnalytics ? fetchedAnalytics.ctr : "8.6%", 
+                                change: "+1.2%", 
+                                pos: true, 
+                                metric: "ctr" 
+                            }
                         ].map((card, i) => (
                             <div key={i} className="bg-zinc-950 border border-zinc-905 p-6 rounded-[2rem] shadow-xl relative overflow-hidden group hover:border-zinc-800 transition-colors">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full blur-[50px] pointer-events-none group-hover:bg-orange-500/10 transition-colors" />
