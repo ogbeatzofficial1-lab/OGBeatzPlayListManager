@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Track, Playlist, Client, Activity, ShareLink, UserProfile, Message, PromoVideo } from '@/src/types';
 import { getSupabaseClient } from "@/src/lib/supabase";
+import { analyzeAudioDsp } from '@/src/services/audioDsp';
 
 interface MediaStoreContextType {
   tracks: Track[];
@@ -29,7 +30,9 @@ interface MediaStoreContextType {
   deleteShareLink: (id: string) => Promise<void>;
   getShareContent: (token: string) => Promise<{ track?: Track, playlist?: Playlist, link: ShareLink } | null>;
   addActivity: (activity: Partial<Activity>) => Promise<void>;
-  analyzeTrack: (name: string, duration?: number) => Promise<{ bpm: number, key: string, duration?: number, tags?: string[] }>;
+  analyzeTrack: (name: string, duration?: number, file?: File | null, fileUrl?: string | null) => Promise<{ bpm: number, key: string, duration?: number, tags?: string[] }>;
+  analysisEngine: 'ai' | 'dsp';
+  setAnalysisEngine: (engine: 'ai' | 'dsp') => void;
   messages: Message[];
   sendMessage: (clientId: string, content: string, image_url?: string | null, direction?: 'inbound' | 'outbound') => Promise<void>;
   promoVideos: PromoVideo[];
@@ -110,6 +113,43 @@ const MOCK_TRACKS: Track[] = [
     type: "audio/mpeg",
     file_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
     image_url: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=300&auto=format&fit=crop",
+    lyrics: `[00:00.00] (Intro - Part 1)
+[00:03.00] Look,
+[00:04.00] If you give them the well, they take the ocean.
+[00:08.00] Give them a drop, they stay in motion.
+[00:15.00] Yeah, let them look.
+[00:18.00] Never let them drown, just give them a sip.
+[00:21.50] Keep the glass full, but don't let it drip.
+[00:26.00] They want the whole cake, I leave them a crumb.
+[00:29.00] Staring at the throne, wondering when it's going to come.
+[00:35.00] I hand them the drought, I rule the empire, they dying in the heat, I'm lighting the fire,
+[00:39.00] Never give them too much, let them beg on their knees, if you want the top shelf, gotta pay for the squeeze.
+[00:43.00] Keep them thirsty, hold up, yeah.
+[00:46.50] Yeah, keep them thirsty.
+[00:50.00] They want the blueprint, want the whole map,
+[00:52.50] Want the secret formula wrapped in the rap, I'm a master class,
+[00:55.00] They just sitting in the back, signing NDAs before I show them where it's at,
+[00:58.00] I'm the oasis but I came with the spikes, they chasing the shadows, I'm blinding the lights,
+[01:02.00] Paid my dues and from now on I'm collecting the tax, you floating on trends, I'm cementing the facts,
+[01:06.00] They taste me like 'please', I leave them all read, hungry for the crown but they getting misled,
+[01:10.00] I'm the supplier, the plug and the source, running this game like a dark-colored horse,
+[01:14.00] They want a bucket, I give them a spoon, leave them in the dark while I howl at the moon.
+[01:21.00] Never let them drown, just give them a sip. Keep the glass full, but don't let it drip.
+[01:28.00] They want the whole cake, I leave them a crumb. Staring at the throne, wondering when it's going to come.
+[01:35.00] I hand them the drought, I rule the empire, they dying in the heat, I'm lighting the fire,
+[01:39.00] Never give them too much, let them beg on their knees, if you want the top shelf, gotta pay for the squeeze.
+[01:43.00] Keep them thirsty, hold up, yeah. Yeah, keep them thirsty.
+[01:52.00] Look at the drip, they dying of dehydration, I'm the main event, they the whole imitation,
+[01:56.00] Try to duplicate this but the copy is blurred, I don't even have to speak, they just hang on the word,
+[02:00.00] I got the reservoir locked in the vault, if your career is dry, that's your internal fault,
+[02:04.00] They out here chasing the stream, I'm controlling the tide, nowhere to run from and nowhere to hide.
+[02:11.00] Shh, listen.
+[02:13.00] They want a piece of the pie, tell them to bake it,
+[02:15.50] Want a spot at the table, tell them to take it, they can't,
+[02:18.00] So they sit and they stare, I'm the smoke in the room, I'm the chill in the air.
+[02:27.00] Pour it up, shut it down, let them look, let them try.
+[02:31.00] Pour it up, shut it down, look them straight in the eye.
+[02:35.00] You want the water? You gotta pray to flow. / You want the fire? I'm consuming the whole.`,
     plays: 981,
     likes: 412,
     created_at: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString()
@@ -538,6 +578,24 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const [analysisEngine, setAnalysisEngine] = useState<'ai' | 'dsp'>(() => {
+    try {
+      const cached = localStorage.getItem('ogbeatz_analysis_engine');
+      return (cached as 'ai' | 'dsp') || 'dsp';
+    } catch {
+      return 'dsp';
+    }
+  });
+
+  const handleSetAnalysisEngine = (engine: 'ai' | 'dsp') => {
+    setAnalysisEngine(engine);
+    try {
+      localStorage.setItem('ogbeatz_analysis_engine', engine);
+    } catch (e) {
+      // ignore
+    }
   };
 
   // Sync to local storage whenever states change (only after loading is complete to protect cached data from startup blank states)
@@ -1775,9 +1833,53 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const analyzeTrack = async (name: string, clientDuration?: number): Promise<{ bpm: number, key: string, duration?: number, tags?: string[] }> => {
+  const analyzeTrack = async (
+    name: string, 
+    clientDuration?: number, 
+    file?: File | null, 
+    fileUrl?: string | null
+  ): Promise<{ bpm: number, key: string, duration?: number, tags: string[] }> => {
     const cleanName = name.replace(/\.[^/.]+$/, ""); // Remove extension
     const duration = clientDuration || (120 + (cleanName.length * 3) % 111);
+
+    if (analysisEngine === 'dsp') {
+      let fileToAnalyze = file;
+      if (!fileToAnalyze && fileUrl) {
+        try {
+          addToast("Retrieving audio asset for local DSP wave-signal parsing...", "info");
+          const response = await fetch(fileUrl);
+          const blob = await response.blob();
+          fileToAnalyze = new File([blob], name, { type: blob.type || 'audio/mpeg' });
+        } catch (err) {
+          console.warn("Could not retrieve file for local DSP processing, falling back to server:", err);
+        }
+      }
+
+      if (fileToAnalyze) {
+        try {
+          addToast("Evaluating audio sample transients and spectrum ratios...", "info");
+          const dspResult = await analyzeAudioDsp(fileToAnalyze);
+          addToast("Local audio DSP analysis completed successfully!", "success");
+          
+          return {
+            bpm: dspResult.bpm,
+            key: dspResult.camelotKey ? `${dspResult.key} (${dspResult.camelotKey})` : dspResult.key,
+            duration,
+            tags: [
+              dspResult.genreCategory,
+              `mood:${dspResult.mood}`,
+              `vibe:${dspResult.vibe}`,
+              `instruments:${dspResult.instruments.join(', ')}`,
+              `pitch:${dspResult.pitch}`,
+              ...dspResult.tags
+            ]
+          };
+        } catch (err: any) {
+          console.error("Local DSP Audio Analyzer failed:", err);
+          addToast("Local DSP failed, falling back to Server-Side AI Analysis...", "info");
+        }
+      }
+    }
 
     const response = await fetch("/api/analyze", {
       method: "POST",
@@ -1800,7 +1902,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     // Build combined tags with vocal/instrumental indicator and SEO keywords
     const typeTag = data.instrumental ? "Instrumental" : "Vocal Track";
     const rawKeywords: string[] = Array.isArray(data.seo_keywords) ? data.seo_keywords : [];
-    const seoTags = rawKeywords.map(k => k.length > 20 ? k.substring(0, 18) + '...' : k);
+    const seoTags = rawKeywords.map((k: string) => k.length > 20 ? k.substring(0, 18) + '...' : k);
     const combinedTags = [
       typeTag,
       `camelot_key:${data.camelot_key || ""}`,
@@ -1892,6 +1994,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       tracks, playlists, clients, activities, profile, loading, loadingProgress, loadingStatusText, shareLinks, messages, promoVideos,
       addTrack, updateTrack, deleteTrack, addPlaylist, updatePlaylist, deletePlaylist, addTrackToPlaylist, removeTrackFromPlaylist,
       addClient, updateClient, deleteClient, updateProfile, addShareLink, deleteShareLink, getShareContent, addActivity, analyzeTrack, sendMessage, addPromoVideo, deletePromoVideo, incrementShareLinkAccess,
+      analysisEngine, setAnalysisEngine: handleSetAnalysisEngine,
       uploadFile,
       toasts, addToast, removeToast, connected
     }}>

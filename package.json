@@ -30,6 +30,7 @@
     "dotenv": "^17.2.3",
     "esbuild": "0.21.5",
     "express": "^5.2.1",
+    "jszip": "^3.10.1",
     "localforage": "^1.10.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
@@ -44,6 +45,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
-    "@types/express": "^5.0.6"
+    "@types/express": "^5.0.6",
+    "@types/jszip": "^3.4.0"
   }
 }

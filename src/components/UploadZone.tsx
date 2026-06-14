@@ -104,8 +104,8 @@ export default function UploadZone({ onSuccess }: { onSuccess: () => void }) {
         setTimeout(() => resolve(0), 4000);
       });
 
-      setUploadStatus("Analyzing BPM and key characteristics with Gemini...");
-      const analysis = await analyzeTrack(file.name, duration);
+      setUploadStatus("Analyzing BPM and key characteristics...");
+      const analysis = await analyzeTrack(file.name, duration, file);
 
       setUploadStatus("Uploading high-fidelity audio master...");
       const finalAudioUrl = await uploadFile('tracks', file);
@@ -192,9 +192,9 @@ export default function UploadZone({ onSuccess }: { onSuccess: () => void }) {
           setTimeout(() => resolve(0), 4000);
         });
 
-        // Step 2: Pitch/BPM analysis using Gemini endpoint
-        updateItemState({ status: 'analyzing', statusText: 'Gemini A&R analyzing...', progress: 40 });
-        const analysis = await analyzeTrack(currentItem.file.name, duration);
+        // Step 2: Pitch/BPM analysis using framework engine
+        updateItemState({ status: 'analyzing', statusText: 'Running wave diagnostics...', progress: 40 });
+        const analysis = await analyzeTrack(currentItem.file.name, duration, currentItem.file);
 
         // Step 3: Cloud upload
         updateItemState({ status: 'uploading', statusText: 'Uploading master WAV/MP3...', progress: 70 });
