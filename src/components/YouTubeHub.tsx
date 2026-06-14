@@ -68,6 +68,8 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
     // Upload section states
     const [uploadSource, setUploadSource] = useState<"studio" | "local">("studio");
     const [localVideoFile, setLocalVideoFile] = useState<{ name: string; size: number; type: string } | null>(null);
+    const [localVideoRawFile, setLocalVideoRawFile] = useState<File | null>(null);
+    const [isPlayingVideo, setIsPlayingVideo] = useState(false);
     const [customVibePrompt, setCustomVibePrompt] = useState("");
     const [aiGrowthInsights, setAiGrowthInsights] = useState<string[]>([]);
     const [selectedVideoId, setSelectedVideoId] = useState<string>("");
@@ -79,6 +81,35 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const [uploadStatusText, setUploadStatusText] = useState("");
     const [publishingLogs, setPublishingLogs] = useState<string[]>([]);
+    const [videoPreviewUrl, setVideoPreviewUrl] = useState<string>("");
+
+    useEffect(() => {
+        let activeUrl = "";
+        let isBlobUrl = false;
+
+        if (uploadSource === "studio" && selectedVideoId) {
+            const selected = promoVideos.find(v => v.id === selectedVideoId);
+            if (selected) {
+                if (selected.video_data instanceof Blob) {
+                    activeUrl = URL.createObjectURL(selected.video_data);
+                    isBlobUrl = true;
+                } else if (selected.video_url) {
+                    activeUrl = selected.video_url;
+                }
+            }
+        } else if (uploadSource === "local" && localVideoRawFile) {
+            activeUrl = URL.createObjectURL(localVideoRawFile);
+            isBlobUrl = true;
+        }
+
+        setVideoPreviewUrl(activeUrl);
+
+        return () => {
+            if (isBlobUrl && activeUrl) {
+                URL.revokeObjectURL(activeUrl);
+            }
+        };
+    }, [selectedVideoId, localVideoRawFile, uploadSource, promoVideos]);
 
     // Comments section states
     const [comments, setComments] = useState<any[]>([
@@ -324,6 +355,7 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
 
     // Automatically fill title & AI description when track asset selected
     const handleAssetSelect = (videoId: string) => {
+        setIsPlayingVideo(false);
         setSelectedVideoId(videoId);
         const video = promoVideos.find(v => v.id === videoId);
         if (!video) return;
@@ -490,6 +522,20 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
         }
     };
 
+    // Helper to convert frontend File/Blob objects to base64 encoding
+    const convertFileToBase64 = (fileOrBlob: File | Blob): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const s = reader.result as string;
+                const base64 = s.substring(s.indexOf(",") + 1);
+                resolve(base64);
+            };
+            reader.onerror = e => reject(e);
+            reader.readAsDataURL(fileOrBlob);
+        });
+    };
+
     // YouTube Upload & Publish Execution Pipeline
     const executeYouTubePublish = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -510,47 +556,154 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
         setUploadStatusText("Initializing publishing thread...");
         setPublishingLogs(["[Thread Init] Spawning video parser controller..."]);
 
-        // Multi-stage status pipeline
-        const stages = uploadSource === "local" ? [
-            { p: 12, msg: `Encoding local video stream "${localVideoFile?.name}"...`, log: `[Encoder] Optimizing local multi-pass H.264 wrapper speed. File size: ${Math.round((localVideoFile?.size || 0) / 1024 / 1024 * 105) / 100} MB` },
-            { p: 32, msg: "Re-indexing codec sound frequencies...", log: "[Packer] Checking high-fidelity AAC structural audio tracks" },
-            { p: 58, msg: "Uploading chunks to official Google servers...", log: "[API Ingest] Streaming video packets to secure YouTube Data API upload endpoint" },
-            { p: 82, msg: "Attaching tags, description chapters and keyword payloads...", log: `[Metadata Sync] Injecting title: "${videoTitle}" (Privacy: ${privacyStatus})` },
-            { p: 95, msg: "Compiling video index and high-contrast visuals...", log: "[Google API] Generating high-resolution default cover placeholder" },
-            { p: 100, msg: "Successfully hosted and available live!", log: "[Success] File successfully deployed to your YouTube video catalog!" }
-        ] : [
-            { p: 15, msg: "Compressing cyber-organic visual graphics...", log: "[Encoder] Direct rendering down-sampling to optimal web specs (1080p WebM stream)" },
-            { p: 35, msg: "Compiling audio track & dynamic master...", log: "[Transmuxer] Multiplexing high-definition PCM audio file with H.264 video wrapper" },
-            { p: 55, msg: "Uploading chunks to YouTube ingest servers...", log: "[API Ingest] Launching chunk upload at https://uploads.youtube.com/api/v3/" },
-            { p: 80, msg: "Attaching labels, SEO tags and description chapters...", log: `[Client API] Patching resource metadata properties (privacy: ${privacyStatus})` },
-            { p: 95, msg: "Verifying standard & high definition processing...", log: "[Google API] Releasing resource payload with security ID and tracking signature" },
-            { p: 100, msg: "Successfully published to YouTube channel!", log: "[Success] Resource successfully processed and online!" }
-        ];
+        // If channel is connected, perform an ACTUAL upload to YouTube!
+        if (authStatus.connected) {
+            let videoDataUrl = "";
+            try {
+                if (uploadSource === "local" && localVideoFile) {
+                    setUploadProgress(15);
+                    setUploadStatusText("Converting local video file to streamable buffer...");
+                    setPublishingLogs(prev => [...prev, "[Encoder] Preparing binary chunks and base64 parsing..."]);
+                    const base64 = await convertFileToBase64(localVideoFile);
+                    videoDataUrl = base64;
+                } else if (uploadSource === "studio" && selectedVideoId) {
+                    setUploadProgress(15);
+                    setUploadStatusText("Retrieving high-definition visualizer file...");
+                    setPublishingLogs(prev => [...prev, "[Studio] Exporting generated visualizer from local storage container..."]);
+                    const videoAsset = promoVideos.find(v => v.id === selectedVideoId);
+                    let blob: Blob | null = null;
+                    if (videoAsset) {
+                        if (videoAsset.video_data instanceof Blob) {
+                            blob = videoAsset.video_data;
+                        } else if (videoAsset.video_url) {
+                            try {
+                                const blobRes = await fetch(videoAsset.video_url);
+                                if (blobRes.ok) {
+                                    blob = await blobRes.blob();
+                                }
+                            } catch (e) {
+                                console.warn("Could not retrieve URL blob", e);
+                            }
+                        }
+                    }
+                    if (!blob) {
+                        throw new Error("Could not find video stream. Please ensure visualizer has finished rendering.");
+                    }
+                    const base64 = await convertFileToBase64(blob);
+                    videoDataUrl = base64;
+                }
+            } catch (err: any) {
+                triggerToast(`Encoding failed: ${err.message}`, "error");
+                setUploadProgress(null);
+                setPublishingLogs(prev => [...prev, `[Error] File preparation failed: ${err.message}`]);
+                return;
+            }
 
-        for (let i = 0; i < stages.length; i++) {
-            await new Promise(resolve => setTimeout(resolve, i === 2 ? 2200 : 1000));
-            setUploadProgress(stages[i].p);
-            setUploadStatusText(stages[i].msg);
-            setPublishingLogs(prev => [...prev, stages[i].log]);
+            try {
+                setUploadProgress(35);
+                setUploadStatusText("Initializing Google OAuth security handshake...");
+                setPublishingLogs(prev => [...prev, "[API Ingest] Initiating YouTube resumable API channels session..."]);
+
+                const uploadPayload = {
+                    videoData: videoDataUrl,
+                    title: videoTitle,
+                    description: videoDescription,
+                    tags: videoTags,
+                    privacy: privacyStatus
+                };
+
+                const uploadRes = await fetch("/api/youtube/upload", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(uploadPayload)
+                });
+
+                if (!uploadRes.ok) {
+                    const errorData = await uploadRes.json();
+                    throw new Error(errorData.error || "Channel publishing endpoint returned error status.");
+                }
+
+                const resData = await uploadRes.json();
+                console.log("Upload resolved successfully:", resData);
+
+                setUploadProgress(100);
+                setUploadStatusText("Delivered! Video is processing live.");
+                setPublishingLogs(prev => [
+                    ...prev, 
+                    `[Success] Resource registered on Google Servers! ID: ${resData.videoId}`,
+                    `[Success] Official URL: ${resData.videoUrl || `https://www.youtube.com/watch?v=${resData.videoId}`}`
+                ]);
+
+                const newLiveVideo = {
+                    id: `yt_live_${Date.now()}`,
+                    youtubeId: resData.videoId || "dQw4w9WgXcQ",
+                    title: videoTitle,
+                    style: uploadSource === "local" ? "Custom Video Upload" : "Cyber-Organic Visualizer",
+                    views: 0,
+                    likes: 0,
+                    commentsCount: 0,
+                    visibility: privacyStatus,
+                    publishedAt: "Newly Uploaded",
+                    thumbnailUrl: uploadSource === "local" 
+                        ? "https://images.unsplash.com/photo-1542204172-e7052809a1a4?q=80&w=250&auto=format&fit=crop"
+                        : "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=250&auto=format&fit=crop"
+                };
+
+                setPublishedVideos(prev => [newLiveVideo, ...prev]);
+                triggerToast("Successfully published master video to your linked YouTube channel!", "success");
+
+            } catch (err: any) {
+                console.error(err);
+                triggerToast(`YouTube delivery failed: ${err.message}`, "error");
+                setUploadProgress(null);
+                setPublishingLogs(prev => [...prev, `[Critical Error] Channel broadcast route failed: ${err.message}`]);
+            }
+
+        } else {
+            // Unconnected fallback or simulated dashboard mode
+            triggerToast("No connected active channel. Demonstrating simulated delivery...", "info");
+            
+            const stages = uploadSource === "local" ? [
+                { p: 12, msg: `Encoding local video stream "${localVideoFile?.name}"...`, log: `[Encoder] Optimizing local multi-pass H.264 wrapper speed. File size: ${Math.round((localVideoFile?.size || 0) / 1024 / 1024 * 105) / 100} MB` },
+                { p: 32, msg: "Re-indexing codec sound frequencies...", log: "[Packer] Checking high-fidelity AAC structural audio tracks" },
+                { p: 58, msg: "Uploading chunks to official Google servers...", log: "[API Ingest] Streaming video packets to secure YouTube Data API upload endpoint" },
+                { p: 82, msg: "Attaching tags, description chapters and keyword payloads...", log: `[Metadata Sync] Injecting title: "${videoTitle}" (Privacy: ${privacyStatus})` },
+                { p: 95, msg: "Compiling video index and high-contrast visuals...", log: "[Google API] Generating high-resolution default cover placeholder" },
+                { p: 100, msg: "Successfully hosted and available live!", log: "[Success] File successfully deployed to your YouTube video catalog!" }
+            ] : [
+                { p: 15, msg: "Compressing cyber-organic visual graphics...", log: "[Encoder] Direct rendering down-sampling to optimal web specs (1080p WebM stream)" },
+                { p: 35, msg: "Compiling audio track & dynamic master...", log: "[Transmuxer] Multiplexing high-definition PCM audio file with H.264 video wrapper" },
+                { p: 55, msg: "Uploading chunks to YouTube ingest servers...", log: "[API Ingest] Launching chunk upload at https://uploads.youtube.com/api/v3/" },
+                { p: 80, msg: "Attaching labels, SEO tags and description chapters...", log: `[Client API] Patching resource metadata properties (privacy: ${privacyStatus})` },
+                { p: 95, msg: "Verifying standard & high definition processing...", log: "[Google API] Releasing resource payload with security ID and tracking signature" },
+                { p: 100, msg: "Successfully published to YouTube channel!", log: "[Success] Resource successfully processed and online!" }
+            ];
+
+            for (let i = 0; i < stages.length; i++) {
+                await new Promise(resolve => setTimeout(resolve, i === 2 ? 2200 : 1000));
+                setUploadProgress(stages[i].p);
+                setUploadStatusText(stages[i].msg);
+                setPublishingLogs(prev => [...prev, stages[i].log]);
+            }
+
+            const fakeNewVideo = {
+                id: `yt_active_${Date.now()}`,
+                youtubeId: "dQw4w9WgXcQ",
+                title: videoTitle,
+                style: uploadSource === "local" ? "Custom Video Upload" : "Cyber-Organic Visualizer",
+                views: 0,
+                likes: 0,
+                commentsCount: 0,
+                visibility: privacyStatus,
+                publishedAt: "Just now",
+                thumbnailUrl: uploadSource === "local" 
+                    ? "https://images.unsplash.com/photo-1542204172-e7052809a1a4?q=80&w=250&auto=format&fit=crop"
+                    : "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=250&auto=format&fit=crop"
+            };
+
+            setPublishedVideos(prev => [fakeNewVideo, ...prev]);
+            triggerToast(`"${videoTitle}" was successfully hosted to your linked channel!`, "success");
         }
-
-        const fakeNewVideo = {
-            id: `yt_active_${Date.now()}`,
-            youtubeId: "dQw4w9WgXcQ",
-            title: videoTitle,
-            style: uploadSource === "local" ? "Custom Video Upload" : "Cyber-Organic Visualizer",
-            views: 0,
-            likes: 0,
-            commentsCount: 0,
-            visibility: privacyStatus,
-            publishedAt: "Just now",
-            thumbnailUrl: uploadSource === "local" 
-                ? "https://images.unsplash.com/photo-1542204172-e7052809a1a4?q=80&w=250&auto=format&fit=crop"
-                : "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=250&auto=format&fit=crop"
-        };
-
-        setPublishedVideos(prev => [fakeNewVideo, ...prev]);
-        triggerToast(`"${videoTitle}" was successfully hosted to your linked channel!`, "success");
 
         // Clear forms
         setTimeout(() => {
@@ -1132,6 +1285,8 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
                                                             size: file.size,
                                                             type: file.type
                                                         });
+                                                        setLocalVideoRawFile(file);
+                                                        setIsPlayingVideo(false);
                                                         const cleanName = file.name.replace(/\.[^/.]+$/, "");
                                                         setVideoTitle(`🔥 ${cleanName.toUpperCase()} • Official Video Release`);
                                                         triggerToast(`Staged video: "${file.name}"`, "success");
@@ -1152,6 +1307,8 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
                                                             size: file.size,
                                                             type: file.type
                                                         });
+                                                        setLocalVideoRawFile(file);
+                                                        setIsPlayingVideo(false);
                                                         const cleanName = file.name.replace(/\.[^/.]+$/, "");
                                                         setVideoTitle(`🔥 ${cleanName.toUpperCase()} • Official Video Release`);
                                                         triggerToast(`Staged video: "${file.name}"`, "success");
@@ -1185,6 +1342,8 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
                                                 type="button"
                                                 onClick={() => {
                                                     setLocalVideoFile(null);
+                                                    setLocalVideoRawFile(null);
+                                                    setIsPlayingVideo(false);
                                                     setVideoTitle("");
                                                     setVideoDescription("");
                                                     setVideoTags("");
@@ -1330,45 +1489,101 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
                             <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group min-h-[220px] flex flex-col justify-between">
                                 <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500 block font-mono">Resource Preview Screen</span>
 
-                                {selectedVideoId ? (
+                                 {selectedVideoId ? (
                                     (() => {
                                         const selected = promoVideos.find(v => v.id === selectedVideoId);
                                         const track = tracks.find(t => t.id === selected?.track_id);
                                         return (
                                             <div className="my-4 space-y-4">
-                                                <div className="aspect-video relative rounded-3xl overflow-hidden border border-zinc-800">
-                                                    <img
-                                                        src={selected?.thumbnail_url || "https://images.unsplash.com/photo-1542208998-f6dbbb27a72f?q=80&w=400&auto=format&fit=crop"}
-                                                        className="w-full h-full object-cover opacity-75"
-                                                        alt="preview"
-                                                    />
-                                                    <div className="absolute inset-0 flex items-center justify-center">
-                                                        <span className="w-10 h-10 bg-black/60 backdrop-blur border border-white/10 rounded-full flex items-center justify-center text-white scale-100 group-hover:scale-105 transition-all">
-                                                            <Play className="w-4 h-4 fill-white ml-0.5" />
-                                                        </span>
-                                                    </div>
+                                                <div className="aspect-video relative rounded-3xl overflow-hidden border border-zinc-800 bg-black flex items-center justify-center">
+                                                    {isPlayingVideo && videoPreviewUrl ? (
+                                                        <video
+                                                            src={videoPreviewUrl}
+                                                            controls
+                                                            autoPlay
+                                                            className="w-full h-full object-contain"
+                                                        />
+                                                    ) : (
+                                                        <div 
+                                                            className="w-full h-full relative cursor-pointer"
+                                                            onClick={() => setIsPlayingVideo(true)}
+                                                        >
+                                                            <img
+                                                                src={selected?.thumbnail_url || "https://images.unsplash.com/photo-1542208998-f6dbbb27a72f?q=80&w=400&auto=format&fit=crop"}
+                                                                className="w-full h-full object-cover opacity-75"
+                                                                alt="preview"
+                                                            />
+                                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/50 transition-colors">
+                                                                <span className="w-12 h-12 bg-orange-500 hover:bg-orange-600 border border-white/10 rounded-full flex items-center justify-center text-black scale-100 hover:scale-110 transition-all shadow-lg shadow-orange-500/20">
+                                                                    <Play className="w-5 h-5 fill-black ml-0.5" />
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div>
-                                                    <h4 className="text-[11px] font-black uppercase text-white truncate max-w-sm">{track?.name || "Premium Release Asset"}</h4>
-                                                    <p className="text-[9px] font-mono text-zinc-550 uppercase mt-0.5 tracking-wider font-bold">
-                                                        Aspect: {selected?.aspectRatio || "16:9"} • Style: {selected?.style || "Modern"}
-                                                    </p>
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        <h4 className="text-[11px] font-black uppercase text-white truncate max-w-sm">{track?.name || "Premium Release Asset"}</h4>
+                                                        <p className="text-[9px] font-mono text-zinc-550 uppercase mt-0.5 tracking-wider font-bold">
+                                                            Aspect: {selected?.aspectRatio || "16:9"} • Style: {selected?.style || "Modern"}
+                                                        </p>
+                                                    </div>
+                                                    {isPlayingVideo && (
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => setIsPlayingVideo(false)}
+                                                            className="px-2.5 py-1 text-[8.5px] font-mono font-black uppercase tracking-widest bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all"
+                                                        >
+                                                            Stop Preview
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         );
                                     })()
                                 ) : localVideoFile ? (
                                     <div className="my-4 space-y-4">
-                                        <div className="aspect-video relative rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 flex flex-col items-center justify-center p-6 text-center">
-                                            <Video className="w-8 h-8 text-orange-500 mb-2 animate-pulse" />
-                                            <span className="text-[10px] font-bold text-zinc-300 truncate max-w-[170px]">{localVideoFile.name}</span>
-                                            <span className="text-[8.5px] text-zinc-550 font-mono mt-0.5">{Math.round(localVideoFile.size / 1024 / 1024 * 100) / 100} MB</span>
+                                        <div className="aspect-video relative rounded-3xl overflow-hidden border border-zinc-800 bg-black flex items-center justify-center">
+                                            {isPlayingVideo && videoPreviewUrl ? (
+                                                <video
+                                                    src={videoPreviewUrl}
+                                                    controls
+                                                    autoPlay
+                                                    className="w-full h-full object-contain"
+                                                />
+                                            ) : (
+                                                <div 
+                                                    className="w-full h-full relative cursor-pointer bg-zinc-900 flex flex-col items-center justify-center p-6 text-center hover:bg-zinc-850 transition-all"
+                                                    onClick={() => setIsPlayingVideo(true)}
+                                                >
+                                                    <Video className="w-10 h-10 text-orange-500 mb-2 animate-bounce" />
+                                                    <span className="text-[10px] font-bold text-zinc-300 truncate max-w-[170px]">{localVideoFile.name}</span>
+                                                    <span className="text-[8.5px] text-zinc-550 font-mono mt-0.5">{Math.round(localVideoFile.size / 1024 / 1024 * 100) / 100} MB</span>
+                                                    
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity">
+                                                        <span className="w-12 h-12 bg-orange-500 hover:bg-orange-600 border border-white/10 rounded-full flex items-center justify-center text-black shadow-lg shadow-orange-500/20">
+                                                            <Play className="w-5 h-5 fill-black ml-0.5" />
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div>
-                                            <h4 className="text-[11px] font-black uppercase text-white truncate max-w-sm">{videoTitle || "Staged Custom Video"}</h4>
-                                            <p className="text-[9px] font-mono text-zinc-400 uppercase mt-1 tracking-wider font-semibold">
-                                                Source: Local Upload File • Status: Video Buffered
-                                            </p>
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h4 className="text-[11px] font-black uppercase text-white truncate max-w-sm">{videoTitle || "Staged Custom Video"}</h4>
+                                                <p className="text-[9px] font-mono text-zinc-400 uppercase mt-1 tracking-wider font-semibold">
+                                                    Source: Local Upload File • Status: Video Buffered
+                                                </p>
+                                            </div>
+                                            {isPlayingVideo && (
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setIsPlayingVideo(false)}
+                                                    className="px-2.5 py-1 text-[8.5px] font-mono font-black uppercase tracking-widest bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all"
+                                                >
+                                                    Stop Preview
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ) : (

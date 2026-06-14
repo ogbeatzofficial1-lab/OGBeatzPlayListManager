@@ -893,6 +893,157 @@ CRITICAL WORKING INSTRUCTIONS FOR FLAWLESS TRANSCRIPTION & ALIGNMENT:
     }
   });
 
+  // API - Transcribe Lyrics using Pollinations AI Audio API
+  app.post("/api/transcribe-lyrics-pollinations", async (req, res) => {
+    const { trackInfo, audioData, audioMimeType, pollinationsUserKey } = req.body;
+    if (!trackInfo) {
+      res.status(400).json({ error: "trackInfo is required" });
+      return;
+    }
+
+    let resolvedBuffer: Buffer | null = null;
+    let resolvedMimeType = audioMimeType || "audio/mpeg";
+
+    // 1. Resolve Audio Buffer
+    if (audioData) {
+      let cleanBase64 = audioData;
+      if (cleanBase64.includes(",")) {
+        cleanBase64 = cleanBase64.split(",")[1];
+      }
+      resolvedBuffer = Buffer.from(cleanBase64, "base64");
+    } else if (trackInfo.file_url) {
+      try {
+        console.log(`[Pollinations Transcription] Downloading track from URL: ${trackInfo.file_url}`);
+        const fetchRes = await fetch(trackInfo.file_url);
+        if (fetchRes.ok) {
+          const arrayBuffer = await fetchRes.arrayBuffer();
+          resolvedBuffer = Buffer.from(arrayBuffer);
+          const contentType = fetchRes.headers.get("content-type");
+          if (contentType) {
+            resolvedMimeType = contentType;
+          }
+        }
+      } catch (fetchErr: any) {
+        console.warn("[Pollinations Transcription] Failed to download track url:", fetchErr.message);
+      }
+    }
+
+    if (!resolvedBuffer) {
+      res.status(400).json({ error: "Unable to retrieve audio data for transcription" });
+      return;
+    }
+
+    // 2. Prepare FormData to send to Pollinations
+    try {
+      const pKey = pollinationsUserKey || process.env.POLLINATIONS_API_KEY || "";
+      
+      const formData = new globalThis.FormData();
+      const blob = new globalThis.Blob([resolvedBuffer], { type: resolvedMimeType });
+      formData.append("file", blob, `audio.${resolvedMimeType.split("/")[1] || "mp3"}`);
+      formData.append("model", "whisper");
+
+      console.log("[Pollinations Transcription] Sending transaction to gen.pollinations.ai; key length:", pKey ? pKey.length : 0);
+      
+      const headers: Record<string, string> = {};
+      if (pKey) {
+        headers["Authorization"] = `Bearer ${pKey}`;
+      }
+
+      const pResponse = await fetch("https://gen.pollinations.ai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: headers,
+        body: formData
+      });
+
+      if (!pResponse.ok) {
+        const errText = await pResponse.text();
+        console.error("[Pollinations Transcription] API Error:", pResponse.status, errText);
+        throw new Error(`Pollinations API returned status ${pResponse.status}: ${errText}`);
+      }
+
+      const result = await pResponse.json() as any;
+      const rawText = result.text || "";
+
+      if (!rawText.trim()) {
+        throw new Error("Transcribed text is empty");
+      }
+
+      console.log("[Pollinations Transcription] Success! Transcribed characters:", rawText.length);
+      
+      // 3. Sync transcribed lyrics with standard timestamps using Gemini OR auto align
+      let alignedLyrics = "";
+      const finalDuration = Math.min(Number(trackInfo.duration) || 120, 300);
+      
+      const geminiApiKey = process.env.GEMINI_API_KEY;
+      if (geminiApiKey && geminiApiKey !== "undefined" && geminiApiKey.trim()) {
+        try {
+          const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+          const alignPrompt = `Take the following high-precision lyrics transcription from Pollinations Whisper API:
+"${rawText}"
+
+And align them into standard bracketed timestamped subtitles ('[mm:ss]') stretching logically from [00:00] across the total track duration of ${finalDuration} seconds. Keep the lyrical lines intact. Only return raw timestamped lines.`;
+          
+          const alignResponse = await generateContentWithFallback(ai, {
+            model: "gemini-3.5-flash",
+            contents: alignPrompt,
+            config: {
+              systemInstruction: "You are an assistant that aligns high-fidelity transcript text with bracketed timestamps [mm:ss]. Output valid JSON with 'lyrics' and 'alignedCount' keys.",
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  lyrics: {
+                    type: Type.STRING,
+                    description: "Timestamped lyrics using [mm:ss] brackets on every line."
+                  },
+                  alignedCount: {
+                    type: Type.INTEGER
+                  }
+                },
+                required: ["lyrics", "alignedCount"]
+              }
+            }
+          });
+
+          const alignedResult = JSON.parse(alignResponse.text.trim());
+          if (alignedResult.lyrics) {
+            alignedLyrics = alignedResult.lyrics;
+          }
+        } catch (alignErr: any) {
+          console.warn("[Pollinations Transcription] Gemini alignment failed, applying automatic distributor:", alignErr.message);
+        }
+      }
+
+      // Fallback alignment if Gemini is unavailable
+      if (!alignedLyrics) {
+        const lines = rawText.split(/[.\n;,]+/);
+        const outputLines: string[] = [];
+        const filteredLines = lines.map((l: string) => l.trim()).filter((l: string) => l.length > 2);
+        const interval = filteredLines.length > 0 ? Math.max(3, Math.floor(finalDuration / (filteredLines.length + 1))) : 5;
+        
+        filteredLines.forEach((line: string, idx: number) => {
+          const timeVal = (idx + 1) * interval;
+          const mins = Math.floor(timeVal / 60).toString().padStart(2, '0');
+          const secs = (timeVal % 60).toString().padStart(2, '0');
+          outputLines.push(`[${mins}:${secs}] ${line}`);
+        });
+        alignedLyrics = outputLines.join("\n");
+      }
+
+      res.json({
+        lyrics: alignedLyrics,
+        description: `Pollinations model 'whisper' transcribed vocals and synced timeline successfully.`
+      });
+
+    } catch (err: any) {
+      console.error("[Pollinations Transcription] Epic Failure:", err.message);
+      res.status(500).json({
+        error: `Pollinations transcription failed: ${err.message || err}`,
+        fallbackTips: "Please check if POLLINATIONS_API_KEY is configured correctly in Settings / environment variables."
+      });
+    }
+  });
+
   // API - Timed Lyrics Aligner
   app.post("/api/align-lyrics", async (req, res) => {
     const { plainTextLyrics, duration } = req.body;
@@ -1156,6 +1307,154 @@ Rules:
       connected: false
     };
     res.json({ status: "disconnected" });
+  });
+
+  // Helper to refresh Google OAuth token
+  async function refreshGoogleAccessToken() {
+    if (!googleAuthSession.refreshToken) {
+      console.warn("[Google Refresh] No refresh token cached inside the active session.");
+      return false;
+    }
+    try {
+      console.log("[Google Refresh] Fetching fresh access token using cached refresh token scope...");
+      const response = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID || "",
+          client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+          refresh_token: googleAuthSession.refreshToken,
+          grant_type: "refresh_token"
+        })
+      });
+      if (response.ok) {
+        const data: any = await response.json();
+        if (data.access_token) {
+          googleAuthSession.accessToken = data.access_token;
+          googleAuthSession.connected = true;
+          if (data.refresh_token) {
+            googleAuthSession.refreshToken = data.refresh_token;
+          }
+          console.log("[Google Refresh] New Google Access Token refreshed successfully.");
+          return true;
+        }
+      } else {
+        const errMsg = await response.text();
+        console.error("[Google Refresh] Refresh request returned error:", errMsg);
+      }
+    } catch (err) {
+      console.warn("[Google Refresh] Failed to refresh Google access token:", err);
+    }
+    return false;
+  }
+
+  // 4e. Real YouTube upload utilizing YouTube Data API (OAuth scope: youtube.upload)
+  app.post("/api/youtube/upload", async (req, res) => {
+    const { videoData, title, description, tags, privacy } = req.body;
+
+    if (!googleAuthSession.connected || !googleAuthSession.accessToken) {
+      res.status(400).json({ error: "YouTube channel is not connected. Please connect your YouTube account first." });
+      return;
+    }
+
+    if (!videoData) {
+      res.status(400).json({ error: "Video data buffer is required for upload." });
+      return;
+    }
+
+    try {
+      // Decode base64 video data
+      const videoBuffer = Buffer.from(videoData, "base64");
+      console.log(`[YouTube Upload] Decoding base64 video. Size: ${videoBuffer.length} bytes`);
+
+      // Initialize resumable session metadata
+      const metadata = {
+        snippet: {
+          title: title || "New Audio Release - OGBeatz Master",
+          description: description || "Officially published standard dynamic master visualizer from OGBeatz.",
+          tags: tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean) : [],
+          categoryId: "10" // Music Category
+        },
+        status: {
+          privacyStatus: privacy || "private"
+        }
+      };
+
+      let token = googleAuthSession.accessToken;
+
+      // Function to attempt resumable session initialization
+      const initUploadSession = async (accessTokenToUse: string) => {
+        return await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessTokenToUse}`,
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Length": videoBuffer.length.toString(),
+            "X-Upload-Content-Type": "video/mp4"
+          },
+          body: JSON.stringify(metadata)
+        });
+      };
+
+      let response = await initUploadSession(token);
+
+      // Handle token expiration: attempt automatic refresh once
+      if (response.status === 401 && googleAuthSession.refreshToken) {
+        console.log("[YouTube Upload] Access token returned 401 Unauthorized. Attempting automatic refresh...");
+        const refreshSuccess = await refreshGoogleAccessToken();
+        if (refreshSuccess && googleAuthSession.accessToken) {
+          token = googleAuthSession.accessToken;
+          response = await initUploadSession(token);
+        }
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("[YouTube Upload] Failed to initiate upload session with Google:", errText);
+        res.status(response.status).json({ error: `Google API initialization failed: ${errText}` });
+        return;
+      }
+
+      const uploadUrl = response.headers.get("Location");
+      if (!uploadUrl) {
+        console.error("[YouTube Upload] Did not receive Location header for resumable upload session.");
+        res.status(500).json({ error: "No Location URI returned by Google upload session." });
+        return;
+      }
+
+      console.log("[YouTube Upload] Resumable upload session initiated successfully. Stream url obtained.");
+
+      // Stream bytes / Upload buffer to location url
+      const uploadBytesRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "video/mp4",
+          "Content-Length": videoBuffer.length.toString()
+        },
+        body: videoBuffer
+      });
+
+      if (!uploadBytesRes.ok) {
+        const uploadErr = await uploadBytesRes.text();
+        console.error("[YouTube Upload] Error transferring binary stream chunks to Google:", uploadErr);
+        res.status(uploadBytesRes.status).json({ error: `Video packet transfer failed: ${uploadErr}` });
+        return;
+      }
+
+      const finalVideoData = await uploadBytesRes.json() as any;
+      console.log("[YouTube Upload] Video successfully uploaded to YouTube! Video ID:", finalVideoData?.id);
+
+      res.json({
+        success: true,
+        videoId: finalVideoData?.id,
+        videoUrl: `https://www.youtube.com/watch?v=${finalVideoData?.id}`,
+        message: "Video has been successfully delivered and published directly to your YouTube channel!"
+      });
+
+    } catch (error: any) {
+      console.error("[YouTube Upload] Critical upload process error:", error);
+      res.status(500).json({ error: `Critical upload process failure: ${error.message}` });
+    }
   });
 
   // 4a. YouTube Live Channel Analytics
@@ -1435,14 +1734,27 @@ File information:
 - File type: "${localFileType || "video/mp4"}"
 - User's vibe/concept description: "${customVibePrompt || 'High-fidelity music branding release'}"
 
+IMPORTANT INSTRUCTIONS FOR GENRE ALIGNMENT:
+- Identify the target genre from the file name and vibe description. If it contains "Lofi" or "Chill" or "Ambient", the tone must be soft, cozy, nostalgic, relaxed, and bedroom-vibe.
+- If it contains "Acoustic", "Organic", or "Guitar", the tone should be intimate, soulful, raw, folk-influenced or melodic singer-songwriter.
+- If it contains "Drill", "Gritty", or "Aggressive", the tone should be industrial, aggressive, gritty, and street-focused (e.g., heavy sliding bass register, high-voltage rap/vocal delivery).
+- If it contains "Trap" or "Heavy", the tone should be dark, heavy, atmospheric, cinematic, and modern urban.
+- Match all copywriting, hashtags, emotions, instruments, and target/similar artists directly to this analyzed genre. Never use generic trap templates for unrelated genres.
+
+CRITICAL REQUIREMENT - PROMOTING COMPLETED SONGS, NOT BEATS:
+This video is for a COMPLETED song/release by an artist who is launching it to the public, NOT a background beat or license for sale.
+- You MUST write the description as a single/original track release.
+- Avoid ANY mention of "beat leases", "leasing rights", "licenses", "BeatStars website", "buying beats", or "WAV stems".
+- Pitch the track for streaming on Spotify, Apple Music, and YouTube Music. Focus on pitching to playlist curators, securing radio/club play, getting fans to pre-save, and launching TikTok/Reels sounds.
+
 Please generate and optimize:
-1. title: One viral, high-CTR, click-optimized title ready for YouTube indexing. Max 95 characters. Use appropriate brackets or labels (e.g. "[PRODUCED BY OGBEATZ]").
+1. title: One viral, high-CTR, click-optimized title ready for YouTube indexing. Max 95 characters. Use appropriate brackets or labels (e.g. "[Official Video]" or "[Official Visualizer]" with the artist and song title). Do NOT include beat sales/leases terminology.
 2. description: Formatted YouTube description including:
    - Dynamic hook chapters list (Intro, Drop, Verse, Outro, Outro Sweep)
-   - Interactive call to action to follow on streaming networks
-   - Producer credits and high-fashion style notes
-3. tags: High-value searchable search tags separated by commas.
-4. growthInsights: An array of 3 professional, short, actionable SEO advisory bullet points (e.g., thumbnail suggestions, overlay accents to keep viewers thirsty, short-form clipping hints) tailored for this visual style.
+   - Interactive call to action to follow and stream on Spotify, Apple Music, and social networks
+   - Artist credits, high-fashion style notes, and lyrics context
+3. tags: High-value searchable search tags separated by commas. No "type beat" keywords.
+4. growthInsights: An array of 3 professional, short, actionable SEO advisory bullet points (e.g., thumbnail suggestions, overlay accents, short-form clipping hints) tailored for this visual style and genre.
 
 Response MUST be a single clean JSON block with keys: 'title', 'description', 'tags', and 'growthInsights'.`;
       } else {
@@ -1455,11 +1767,24 @@ Track details:
 - Associated keywords: ${(tags || []).join(", ")}
 - Lyric text sheet if any: "${lyrics || ""}"
 
+IMPORTANT INSTRUCTIONS FOR GENRE ALIGNMENT:
+- Identify the target genre from the keywords/tags. If it contains "Lofi" or "Chill" or "Ambient", the tone must be soft, cozy, nostalgic, relaxed, and bedroom-vibe.
+- If it contains "Acoustic", "Organic", or "Guitar", the tone should be intimate, soulful, raw, folk-influenced or melodic singer-songwriter.
+- If it contains "Drill", "Gritty", or "Aggressive", the tone should be industrial, aggressive, gritty, and street-focused (e.g., heavy sliding bass register, high-voltage rap/vocal delivery).
+- If it contains "Trap" or "Heavy", the tone should be dark, heavy, atmospheric, cinematic, and modern urban.
+- Match all copywriting, hashtags, emotions, instruments, and target/similar artists directly to this analyzed genre. Never use generic trap templates for unrelated genres.
+
+CRITICAL REQUIREMENT - PROMOTING COMPLETED SONGS, NOT BEATS:
+This track is a COMPLETED song/release by an artist who is launching it to the public, NOT a background beat for sale.
+- You MUST write the description as a single/original track release.
+- Avoid ANY mention of "beat leases", "leasing rights", "licenses", "BeatStars website", "buying beats", or "WAV stems".
+- Pitch the track for streaming on Spotify, Apple Music, and YouTube Music. Focus on pitching to playlist curators, securing radio/club play, getting fans to pre-save, and launching TikTok/Reels sounds.
+
 Please generate:
-1. title: One high-engagement target title emphasizing original composition and copyright/license safety. Includes bracketed metadata.
-2. description: Generous, formatted paragraphs including chapter marks distributed across the duration (e.g. '[00:00] Intro', '[00:20] Hook Phase' up to length), and licensing credentials.
-3. tags: High-value searchable tags separated by commas.
-4. growthInsights: An array of 3 professional, short, action-oriented SEO/A&R advisory bullet points.
+1. title: One high-engagement target title emphasizing original composition, copyright/license safety, and beautiful bracketed metadata. Max 95 characters.
+2. description: Generous, formatted paragraphs including chapter marks distributed across the duration (e.g. '[00:00] Intro', '[00:20] Hook Phase' up to length), streaming links, credits, and lyrics context.
+3. tags: High-volume searchable tags separated by commas. No "type beat" keywords.
+4. growthInsights: An array of 3 professional, short, action-oriented SEO/A&R advisory bullet points relevant to this specific genre's demographic.
 
 Return strict JSON only matching the keys: 'title', 'description', 'tags', and 'growthInsights'.`;
       }
@@ -1468,7 +1793,7 @@ Return strict JSON only matching the keys: 'title', 'description', 'tags', and '
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
-          systemInstruction: "You are an elite music media agent specializing in YouTube SEO branding. Always respond with valid JSON matching the exact keys requested.",
+          systemInstruction: "You are a platinum-selling music marketing copywriter and elite music media agent specializing in YouTube SEO branding for artist song releases across hip-hop, trap, lofi, electronic, drill, pop, and acoustic indie productions. You write highly customized, authentic, and evocative promotional metadata that perfectly aligns with the specific subgenre, emotional vibe, and instrumentation. CRITICAL: These tracks are full, completed artist songs/releases with vocals. You must never write copy that tries to sell or lease background beats, or licenses, nor mention 'licensing', 'leases', 'selling beats', or 'beat catalog'. Instead, promote the track as a completed masterpiece for fans to stream (on Spotify, Apple, etc.), playlist curators to feature, blogs to review, and TikTok/reels to use. Return direct JSON with title, description, tags, and growthInsights properties as specified.",
           responseMimeType: "application/json"
         }
       });

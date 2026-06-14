@@ -84,6 +84,7 @@ import ClientPortal from "./components/ClientPortal";
 import ShareModal from "./components/ShareModal";
 import TrackDetailsModal from "./components/TrackDetailsModal";
 import YouTubeHub from "./components/YouTubeHub";
+import ExportMasterModal from "./components/ExportMasterModal";
 import { Track, ShareLink, Client, Playlist } from "./types";
 import { cn } from "./lib/utils";
 import { getSupabaseClient, supabaseUrl } from "./lib/supabase";
@@ -346,6 +347,35 @@ export default function App() {
     runDatabaseInspection();
   }, []);
 
+  // Handle Pollinations BYOP (Bring Your Own Pollen) OAuth redirect fragment on mount
+  useEffect(() => {
+    try {
+      const hash = window.location.hash;
+      if (hash && hash.includes("api_key=")) {
+        const params = new URLSearchParams(hash.slice(1));
+        const apiKey = params.get("api_key");
+        if (apiKey) {
+          localStorage.setItem("POLLINATIONS_USER_KEY", apiKey);
+          
+          if (window.opener) {
+            try {
+              window.opener.postMessage({ type: "POLLINATIONS_AUTH_SUCCESS", apiKey }, "*");
+            } catch (err) {
+              console.warn("window.opener message error:", err);
+            }
+            window.close();
+            return;
+          }
+          
+          addToast("Successfully linked your custom Pollinations account!", "success");
+          window.location.hash = "";
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to parse Pollinations OAuth fragment:", e);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeView === "settings") {
       runDatabaseInspection();
@@ -404,17 +434,37 @@ export default function App() {
   );
 
   const [isExportingZip, setIsExportingZip] = useState(false);
-  const [exportFormat, setExportFormat] = useState<'MP3' | 'WAV' | 'FLAC'>('MP3');
+  const [exportFormat, setExportFormat] = useState<'MP3' | 'WAV' | 'FLAC'>(() => {
+    const saved = localStorage.getItem('ogbeatz_preferred_export_format');
+    if (saved === 'MP3' || saved === 'WAV' || saved === 'FLAC') {
+      return saved as 'MP3' | 'WAV' | 'FLAC';
+    }
+    return 'MP3';
+  });
+  const [showExportModal, setShowExportModal] = useState(false);
 
-  const handleExportTracksZip = async () => {
-    if (tracks.length === 0) {
+  const handleUpdateExportFormat = (fmt: 'MP3' | 'WAV' | 'FLAC') => {
+    setExportFormat(fmt);
+    localStorage.setItem('ogbeatz_preferred_export_format', fmt);
+  };
+
+  const handleExportTracksZip = async (
+    format: 'MP3' | 'WAV' | 'FLAC' = exportFormat,
+    customPrefix: string = "",
+    usePlaylistOnly: boolean = false
+  ) => {
+    const targetTracks = usePlaylistOnly && selectedPlaylist
+      ? playlistTracks
+      : tracks;
+
+    if (targetTracks.length === 0) {
       addToast("No tracks in your library to export.", "error");
       return;
     }
 
     try {
       setIsExportingZip(true);
-      addToast(`Initializing secure bundle compiler (${exportFormat})...`, "info");
+      addToast(`Initializing secure bundle compiler (${format})...`, "info");
 
       const zip = new JSZip();
 
@@ -422,15 +472,15 @@ export default function App() {
       let catalog = `================================================================================
           OGBEATZ MASTER STUDIO - EXPORT CATALOG SUMMARY
           Generated On: ${new Date().toLocaleString()}
-          Target Audio Format: ${exportFormat} (Studio High-Fidelity)
-          Total Tracks: ${tracks.length}
+          Target Audio Format: ${format} (Studio High-Fidelity)
+          Total Tracks: ${targetTracks.length}
 ================================================================================\n\n`;
 
       catalog += String("").padEnd(80, "-") + "\n";
       catalog += `${"NAME".padEnd(30)} | ${"BPM".padEnd(5)} | ${"KEY".padEnd(10)} | ${"DURATION".padEnd(8)} | ${"PLAYS".padEnd(6)} | ${"LIKES".padEnd(6)}\n`;
       catalog += String("").padEnd(80, "-") + "\n";
 
-      tracks.forEach((track) => {
+      targetTracks.forEach((track) => {
         const durMin = Math.floor(track.duration / 60);
         const durSec = Math.floor(track.duration % 60).toString().padStart(2, "0");
         const formattedDur = `${durMin}:${durSec}`;
@@ -444,7 +494,7 @@ export default function App() {
       zip.file("MASTER_CATALOG.txt", catalog);
 
       // Create separate folders and files for each track
-      tracks.forEach((track) => {
+      for (const track of targetTracks) {
         const folderName = (track.name || "Untitled_Track").replace(/[/\\?%*:|"<>\s]/g, "_");
         const trackFolder = zip.folder(folderName);
 
@@ -462,11 +512,11 @@ export default function App() {
           let formatEncoding = "MPEG-1 Audio Layer III (320kbps)";
           let formatExt = "mp3";
           let sizeMultiplier = 1;
-          if (exportFormat === "WAV") {
+          if (format === "WAV") {
             formatEncoding = "Uncompressed Linear PCM (24-bit / 48kHz)";
             formatExt = "wav";
             sizeMultiplier = 5.2;
-          } else if (exportFormat === "FLAC") {
+          } else if (format === "FLAC") {
             formatEncoding = "Free Lossless Audio Codec (Level 5 / 24-bit)";
             formatExt = "flac";
             sizeMultiplier = 3.1;
@@ -481,7 +531,7 @@ STUDIO PROFILE:
 --------------------------------------------------------------------------------
 Track Name:      ${track.name}
 Artist / Producer: ${track.artist || "OGBeatz"}
-Target Format:   ${exportFormat}
+Target Format:   ${format}
 Bitrate/Encoding: ${formatEncoding}
 Track Size (Est): ${(finalSize / (1024 * 1024)).toFixed(2)} MB
 Original Format: ${track.type || "audio/mpeg"}
@@ -531,14 +581,45 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
             : "No lyrics available.";
           
           trackFolder.file("lyrics_plain.txt", plainLyrics);
-        }
-      });
 
-      addToast(`Compressing ${exportFormat} master catalogs and LRC scripts...`, "info");
+          // 3. Fetch Artwork in Background and Append if Available
+          if (track.image_url) {
+            try {
+              const res = await fetch(track.image_url);
+              if (res.ok) {
+                const blob = await res.blob();
+                let artExt = "png";
+                const cType = res.headers.get("content-type");
+                if (cType) {
+                  if (cType.includes("jpeg") || cType.includes("jpg")) {
+                    artExt = "jpg";
+                  } else if (cType.includes("webp")) {
+                    artExt = "webp";
+                  } else if (cType.includes("gif")) {
+                    artExt = "gif";
+                  }
+                }
+                trackFolder.file(`artwork.${artExt}`, blob);
+              }
+            } catch (err) {
+              console.warn(`Could not add artwork for track ${track.name} due to CORS/network permissions:`, err);
+            }
+          }
+        }
+      }
+
+      addToast(`Compressing ${format} master catalogs and LRC scripts...`, "info");
       const content = await zip.generateAsync({ type: "blob" });
       
       const dateStr = new Date().toISOString().slice(0, 10);
-      const outputFilename = `ogbeatz_masters_${exportFormat.toLowerCase()}_export_${dateStr}.zip`;
+      let basePrefix = "ogbeatz_masters";
+      if (customPrefix && customPrefix.trim()) {
+        basePrefix = customPrefix.trim().replace(/[/\\?%*:|"<>\s]/g, "_");
+      } else if (usePlaylistOnly && selectedPlaylist) {
+        basePrefix = selectedPlaylist.name.toLowerCase().replace(/[/\\?%*:|"<>\s]/g, "_");
+      }
+      
+      const outputFilename = `${basePrefix}_${format.toLowerCase()}_export_${dateStr}.zip`;
 
       const link = document.createElement("a");
       link.href = URL.createObjectURL(content);
@@ -547,7 +628,7 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
       link.click();
       document.body.removeChild(link);
 
-      addToast(`Studio Master Catalog (${exportFormat}) exported successfully as ZIP!`, "success");
+      addToast(`Studio Master Catalog (${format}) exported successfully as ZIP!`, "success");
     } catch (error: any) {
       console.error("ZIP Generation failed:", error);
       addToast(`Creation of library ZIP failed: ${error.message || error}`, "error");
@@ -1021,6 +1102,31 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
         : "No lyrics available.";
       
       zip.file(`${sanitizedBaseName}_lyrics_plain.txt`, plainLyrics);
+
+      // 4. Fetch Artwork if available
+      if (track.image_url) {
+        addToast("Retrieving release artwork canvas...", "info");
+        try {
+          const res = await fetch(track.image_url);
+          if (res.ok) {
+            const blob = await res.blob();
+            let artExt = "png";
+            const cType = res.headers.get("content-type");
+            if (cType) {
+              if (cType.includes("jpeg") || cType.includes("jpg")) {
+                artExt = "jpg";
+              } else if (cType.includes("webp")) {
+                artExt = "webp";
+              } else if (cType.includes("gif")) {
+                artExt = "gif";
+              }
+            }
+            zip.file(`${sanitizedBaseName}_artwork.${artExt}`, blob);
+          }
+        } catch (err) {
+          console.warn("Could not retrieve master artwork due to network/CORS restrictions:", err);
+        }
+      }
 
       // Generate the ZIP
       addToast("Finalizing compression on high-velocity studio ZIP archive...", "info");
@@ -1813,7 +1919,7 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
                     name="exportFormat"
                     value={fmt}
                     checked={exportFormat === fmt}
-                    onChange={() => setExportFormat(fmt)}
+                    onChange={() => handleUpdateExportFormat(fmt)}
                     className="sr-only"
                   />
                   {fmt}
@@ -1823,7 +1929,7 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
           </div>
 
           <button
-            onClick={handleExportTracksZip}
+            onClick={() => setShowExportModal(true)}
             disabled={isExportingZip}
             className="border border-zinc-800 bg-zinc-950 text-orange-500 hover:text-white hover:border-orange-500/50 px-6 py-3 rounded-full font-black tracking-widest uppercase text-xs flex items-center gap-2 hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none cursor-pointer h-[44px]"
             title={`Export master tracks, specifications sheet, and timestamped lrc lyrics in a unified ${exportFormat} ZIP archive`}
@@ -2869,6 +2975,13 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
                 className="px-6 py-3 border border-zinc-900 rounded-full text-xs font-black uppercase tracking-widest hover:border-zinc-700 transition-all text-zinc-400 hover:text-white flex items-center gap-2"
               >
                 <Share2 className="w-4 h-4" /> Share Collection
+              </button>
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="px-6 py-3 border border-zinc-900 rounded-full text-xs font-black uppercase tracking-widest hover:border-orange-500/50 hover:text-orange-500/90 transition-all text-orange-500 flex items-center gap-2"
+                title="Export this entire collection as a compiled ZIP archive"
+              >
+                <FileArchive className="w-4 h-4 text-orange-500" /> Export Collection
               </button>
             </div>
           )}
@@ -5627,6 +5740,18 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
               setEditingTrack(t);
             }}
             playlistTracks={tracks}
+          />
+        )}
+        {showExportModal && (
+          <ExportMasterModal
+            key="export-master-modal"
+            onClose={() => setShowExportModal(false)}
+            onExport={handleExportTracksZip}
+            defaultFormat={exportFormat}
+            onUpdateDefaultFormat={handleUpdateExportFormat}
+            selectedPlaylistName={selectedPlaylist ? selectedPlaylist.name : null}
+            totalLibraryTracksCount={tracks.length}
+            playlistTracksCount={playlistTracks.length}
           />
         )}
       </AnimatePresence>

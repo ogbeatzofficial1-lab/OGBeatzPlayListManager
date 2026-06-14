@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Save, Image as ImageIcon, Trash2, Loader2, Sparkles } from 'lucide-react';
+import { X, Save, Image as ImageIcon, Trash2, Loader2, Sparkles, Key, LogIn, LogOut } from 'lucide-react';
 import { Track } from '../types';
 import { useMediaStore } from '../context/MediaStoreContext';
 
@@ -18,6 +18,74 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
   const [lyricsFilename, setLyricsFilename] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const lyricsInputRef = useRef<HTMLInputElement>(null);
+
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [generatingArt, setGeneratingArt] = useState(false);
+  const [pollinationsKeyConnected, setPollinationsKeyConnected] = useState(() => !!localStorage.getItem("POLLINATIONS_USER_KEY"));
+
+  const connectPollinations = () => {
+    // Generate simple redirect URI back to the application parent window route
+    const redirectUrl = encodeURIComponent(window.location.href);
+    const clientId = (import.meta as any).env.VITE_POLLINATIONS_CLIENT_ID || "pk_UkifqMuyjH77QPxB";
+    const authUrl = `https://enter.pollinations.ai/authorize?redirect_uri=${redirectUrl}&client_id=${clientId}`;
+    
+    addToast("Redirecting to Pollinations for secure login...", "info");
+    setTimeout(() => {
+      window.location.href = authUrl;
+    }, 1200);
+  };
+
+  const disconnectPollinations = () => {
+    localStorage.removeItem("POLLINATIONS_USER_KEY");
+    setPollinationsKeyConnected(false);
+    addToast("Disconnected your Pollinations account.", "info");
+  };
+
+  const handleSuggestPrompt = () => {
+    const name = formData.name || 'Electronic Beat';
+    const artist = formData.artist || 'OG Beatz';
+    setAiPrompt(`Professional high-fashion album cover art, premium layout for "${name}" by ${artist}, neon dark cyber-organic style, deep obsidian blacks, matte silver finish, intense amber glow accents, tech-forward geometric patterns, 8k resolution, cinematic lighting, ultra detailed.`);
+  };
+
+  const handleGenerateAiArt = async () => {
+    if (!aiPrompt.trim()) {
+      addToast("Please enter a visual design prompt first", "error");
+      return;
+    }
+    
+    setGeneratingArt(true);
+    addToast("Generating premium artwork with Pollinations Flux AI...", "info");
+    
+    try {
+      const userKey = localStorage.getItem("POLLINATIONS_USER_KEY") || "";
+      const seed = Math.floor(Math.random() * 1000000);
+      let url = `https://gen.pollinations.ai/image/${encodeURIComponent(aiPrompt)}?model=flux&width=1024&height=1024&seed=${seed}`;
+      if (userKey) {
+        url += `&key=${encodeURIComponent(userKey)}`;
+      }
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Aesthetic engine unresponsive or rate limited");
+      
+      const blob = await response.blob();
+      const file = new File([blob], `ai_art_${Date.now()}.png`, { type: 'image/png' });
+      
+      setUploading(true);
+      const publicUrl = await uploadFile('artwork', file);
+      if (publicUrl) {
+        setFormData(prev => ({ ...prev, image_url: publicUrl }));
+        addToast("AI Cover Art generated and uploaded successfully!", "success");
+      } else {
+        throw new Error("Local upload failed");
+      }
+    } catch (err: any) {
+      console.error("AI Art generation failed:", err);
+      addToast(`Artwork generation failed: ${err.message || err}`, "error");
+    } finally {
+      setGeneratingArt(false);
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (onSave) {
@@ -125,7 +193,74 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
               accept="image/*" 
               onChange={handleImageChange} 
             />
-            <p className="text-[9px] text-zinc-500 text-center font-medium leading-relaxed uppercase tracking-widest px-2">Square format recommended for streaming portals</p>
+            <p className="text-[9px] text-zinc-500 text-center font-medium leading-relaxed uppercase tracking-widest px-2 pb-2">Square format recommended for streaming portals</p>
+
+            {/* AI Cover Art Generator Widget */}
+            <div className="p-4 bg-zinc-900/40 border border-zinc-900 rounded-2xl space-y-3">
+              <div className="flex items-center gap-1.5 justify-between">
+                <span className="text-[9px] font-black uppercase tracking-widest text-orange-500 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-orange-500 animate-pulse" /> AI Cover Generator
+                </span>
+                <span className="text-[7px] font-mono bg-orange-500/10 border border-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded uppercase font-bold tracking-widest">
+                  Flux Engine
+                </span>
+              </div>
+              <p className="text-[8px] text-zinc-500 leading-normal">
+                Generate highly polished, production-ready release visuals automatically.
+              </p>
+
+              {/* Pollinations BYOP Authentication section */}
+              <div className="flex items-center justify-between bg-zinc-950/60 p-2 border border-zinc-850 rounded-xl text-[9px]">
+                <div className="flex items-center gap-1">
+                  <Key className={`w-3 h-3 ${pollinationsKeyConnected ? 'text-green-400' : 'text-zinc-500'}`} />
+                  <span className="font-mono text-[8px] text-zinc-400">
+                    {pollinationsKeyConnected ? "Pollinations Sync'd" : "No Account Linked"}
+                  </span>
+                </div>
+                {pollinationsKeyConnected ? (
+                  <button
+                    type="button"
+                    onClick={disconnectPollinations}
+                    className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-zinc-500 hover:text-red-400 transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-2.5 h-2.5" /> Disconnect
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={connectPollinations}
+                    className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-orange-400 hover:text-orange-300 transition-colors cursor-pointer"
+                  >
+                    <LogIn className="w-2.5 h-2.5" /> Login / BYOP
+                  </button>
+                )}
+              </div>
+
+              <textarea
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="Describe your design concept (e.g., Cybernetic mixer board in obsidian smoke with safety orange cords...)"
+                className="w-full h-16 bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 outline-none focus:border-orange-500 text-[10px] font-mono leading-relaxed resize-none text-zinc-300 placeholder:text-zinc-650"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSuggestPrompt}
+                  className="flex-1 py-1 px-1 border border-zinc-850 hover:border-zinc-700 text-[8px] font-black uppercase tracking-wider text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer active:scale-95"
+                >
+                  Suggest Vibe
+                </button>
+                <button
+                  type="button"
+                  disabled={generatingArt || uploading}
+                  onClick={handleGenerateAiArt}
+                  className="flex-1 py-1 px-1 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-900 text-black disabled:text-zinc-500 text-[8px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 disabled:scale-100"
+                >
+                  {generatingArt ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
+                  {generatingArt ? "Designing..." : "Generate"}
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Form Fields */}

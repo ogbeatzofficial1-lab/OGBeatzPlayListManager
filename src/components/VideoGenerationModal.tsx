@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Video, Sparkles, Wand2, Loader2, Play, Pause, Music, Sliders, CheckCircle2, AlertCircle, Share2, Download } from 'lucide-react';
+import { X, Video, Sparkles, Wand2, Loader2, Play, Pause, Music, Sliders, CheckCircle2, AlertCircle, Share2, Download, Mic, Key, LogIn, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
 import { useMediaStore } from '../context/MediaStoreContext';
@@ -38,6 +38,25 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
   const [isAligningLyrics, setIsAligningLyrics] = useState(false);
   const [lyricsSaveStatus, setLyricsSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [lyricsStatusMsg, setLyricsStatusMsg] = useState('');
+  const [pollinationsKeyConnected, setPollinationsKeyConnected] = useState(() => !!localStorage.getItem("POLLINATIONS_USER_KEY"));
+
+  const connectPollinations = () => {
+    // Generate simple redirect URI back to the application parent window route
+    const redirectUrl = encodeURIComponent(window.location.href);
+    const clientId = (import.meta as any).env.VITE_POLLINATIONS_CLIENT_ID || "pk_UkifqMuyjH77QPxB";
+    const authUrl = `https://enter.pollinations.ai/authorize?redirect_uri=${redirectUrl}&client_id=${clientId}`;
+    
+    addToast?.("Redirecting to Pollinations for secure login...", "info");
+    setTimeout(() => {
+      window.location.href = authUrl;
+    }, 1200);
+  };
+
+  const disconnectPollinations = () => {
+    localStorage.removeItem("POLLINATIONS_USER_KEY");
+    setPollinationsKeyConnected(false);
+    addToast?.("Disconnected your Pollinations account.", "info");
+  };
 
   const [clipEnabled, setClipEnabled] = useState(false);
   const [clipStart, setClipStart] = useState(0);
@@ -232,6 +251,72 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     } catch (err: any) {
       console.error(err);
       setLyricsStatusMsg("Failed to generate lyrics. Please try again.");
+    } finally {
+      setIsGeneratingLyrics(false);
+    }
+  };
+
+  const handleTranscribeLyricsPollinations = async () => {
+    setIsGeneratingLyrics(true);
+    setLyricsStatusMsg("Extracting vocal audio from track...");
+    addToast?.("Extracting vocal audio from track...", "info");
+    
+    let audioData: string | null = null;
+    let audioMimeType = "audio/mpeg";
+
+    if (activeTrack?.file_url) {
+      try {
+        const response = await fetch(activeTrack.file_url);
+        const blob = await response.blob();
+        audioMimeType = blob.type || "audio/mpeg";
+        
+        // Convert to base64
+        audioData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        setLyricsStatusMsg("Transcribing with Pollinations Whispering Neural Net...");
+      } catch (audioErr) {
+        console.warn("Could not load track audio for direct Speech-to-Text:", audioErr);
+      }
+    }
+
+    try {
+      const res = await fetch("/api/transcribe-lyrics-pollinations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          trackInfo: activeTrack || { name, artist, bpm: 120, key_signature: 'C' },
+          audioData,
+          audioMimeType,
+          pollinationsUserKey: localStorage.getItem("POLLINATIONS_USER_KEY") || ""
+        }),
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Server returned error status");
+      }
+      
+      if (data.lyrics) {
+        setLyricsText(data.lyrics);
+        setLyricsStatusMsg(`Lyrics output: ${data.description}`);
+        addToast?.("Speech-to-Text complete! Vocals transcribed and synced successfully.", "success");
+      } else {
+        throw new Error("No transcribed text returned in response");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setLyricsStatusMsg(`Pollinations Transcription failed: ${err.message || err}`);
+      addToast?.(`Transcription Failed: ${err.message || err}`, "error");
     } finally {
       setIsGeneratingLyrics(false);
     }
@@ -2468,9 +2553,39 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                             <div className="space-y-2 p-3.5 bg-zinc-950/80 border border-zinc-900/80 rounded-2xl font-sans">
                               {/* Console Header */}
                               <div className="flex items-center justify-between border-b border-zinc-900/55 pb-2">
-                                <span className="text-[9px] font-black uppercase tracking-[0.15em] text-zinc-400 font-mono">Timed Lyrics Console</span>
+                                <span className="text-[9px] font-black uppercase tracking-[0.15em] text-zinc-400 font-mono font-bold flex items-center gap-1.5">Timed Lyrics Console</span>
                                 <div className="flex flex-wrap items-center gap-1.5 justify-end">
 
+                                  {/* Pollinations BYOP Status and Connection Action */}
+                                  <button
+                                    type="button"
+                                    onClick={pollinationsKeyConnected ? disconnectPollinations : connectPollinations}
+                                    className={`flex items-center gap-1 py-1 px-2 border rounded-lg text-[8px] font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 font-bold ${
+                                      pollinationsKeyConnected
+                                        ? "bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
+                                        : "bg-zinc-950 border-zinc-850 text-zinc-400 hover:text-white hover:border-zinc-750"
+                                    }`}
+                                    title={pollinationsKeyConnected ? "Authenticated with custom Pollinations account. Click to disconnect." : "Authenticate via Pollinations BYOP (Bring Your Own Pollen)"}
+                                  >
+                                    <Key className="w-2.5 h-2.5" />
+                                    <span>{pollinationsKeyConnected ? "Pollin Sync'd" : "Link Pollin"}</span>
+                                  </button>
+
+                                  {/* Pollinations Speech-To-Text Whisper button */}
+                                  <button
+                                    type="button"
+                                    onClick={handleTranscribeLyricsPollinations}
+                                    disabled={isGeneratingLyrics || isAligningLyrics}
+                                    className="flex items-center gap-1 py-1 px-2.5 bg-orange-500 hover:bg-orange-600 text-black rounded-lg text-[8px] font-black uppercase tracking-wider transition-all disabled:bg-zinc-900 disabled:text-zinc-500 cursor-pointer active:scale-95 disabled:scale-100 font-bold"
+                                    title="Transcribe audio vocals using Pollinations high-fidelity Whisper voice API"
+                                  >
+                                    {isGeneratingLyrics ? (
+                                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                    ) : (
+                                      <Mic className="w-2.5 h-2.5" />
+                                    )}
+                                    <span>Whisper STT</span>
+                                  </button>
 
                                   {/* AI lyrics writer button */}
                                   <button
