@@ -1394,7 +1394,7 @@ Rules:
 
   // 5. AI COPYWRITER: Generate YouTube SEO Meta
   app.post("/api/youtube/generate-meta", async (req, res) => {
-    const { trackName, key, bpm, duration, lyrics, tags } = req.body;
+    const { trackName, key, bpm, duration, lyrics, tags, isLocalVideo, localFileName, localFileSize, localFileType, customVibePrompt } = req.body;
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey || apiKey === "undefined" || !apiKey.trim()) {
@@ -1412,7 +1412,27 @@ Rules:
         }
       });
 
-      const prompt = `Compose professional, search-optimized high-impact YouTube video release metadata for an upcoming music release.
+      let prompt = "";
+      if (isLocalVideo) {
+        prompt = `An artist is uploading their custom local video file to YouTube.
+File information:
+- File name: "${localFileName}"
+- File size: ${Math.round((localFileSize || 0) / 1024 / 1024 * 100) / 100} MB
+- File type: "${localFileType || "video/mp4"}"
+- User's vibe/concept description: "${customVibePrompt || 'High-fidelity music branding release'}"
+
+Please generate and optimize:
+1. title: One viral, high-CTR, click-optimized title ready for YouTube indexing. Max 95 characters. Use appropriate brackets or labels (e.g. "[PRODUCED BY OGBEATZ]").
+2. description: Formatted YouTube description including:
+   - Dynamic hook chapters list (Intro, Drop, Verse, Outro, Outro Sweep)
+   - Interactive call to action to follow on streaming networks
+   - Producer credits and high-fashion style notes
+3. tags: High-value searchable search tags separated by commas.
+4. growthInsights: An array of 3 professional, short, actionable SEO advisory bullet points (e.g., thumbnail suggestions, overlay accents to keep viewers thirsty, short-form clipping hints) tailored for this visual style.
+
+Response MUST be a single clean JSON block with keys: 'title', 'description', 'tags', and 'growthInsights'.`;
+      } else {
+        prompt = `Compose professional, search-optimized high-impact YouTube video release metadata for an upcoming music release.
 Track details:
 - Title Name: "${trackName}"
 - Key pitch signature: "${key || "C Major"}"
@@ -1425,8 +1445,10 @@ Please generate:
 1. title: One high-engagement target title emphasizing original composition and copyright/license safety. Includes bracketed metadata.
 2. description: Generous, formatted paragraphs including chapter marks distributed across the duration (e.g. '[00:00] Intro', '[00:20] Hook Phase' up to length), and licensing credentials.
 3. tags: High-value searchable tags separated by commas.
+4. growthInsights: An array of 3 professional, short, action-oriented SEO/A&R advisory bullet points.
 
-Return strict JSON only matching the keys: 'title', 'description', and 'tags'.`;
+Return strict JSON only matching the keys: 'title', 'description', 'tags', and 'growthInsights'.`;
+      }
 
       const aiResponse = await generateContentWithFallback(ai, {
         model: "gemini-3.5-flash",

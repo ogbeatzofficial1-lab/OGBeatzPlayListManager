@@ -66,6 +66,10 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
     const [timeframe, setTimeframe] = useState<"7d" | "30d" | "90d">("30d");
 
     // Upload section states
+    const [uploadSource, setUploadSource] = useState<"studio" | "local">("studio");
+    const [localVideoFile, setLocalVideoFile] = useState<{ name: string; size: number; type: string } | null>(null);
+    const [customVibePrompt, setCustomVibePrompt] = useState("");
+    const [aiGrowthInsights, setAiGrowthInsights] = useState<string[]>([]);
     const [selectedVideoId, setSelectedVideoId] = useState<string>("");
     const [videoTitle, setVideoTitle] = useState("");
     const [videoDescription, setVideoDescription] = useState("");
@@ -334,6 +338,67 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
 
     // Generate smart YouTube SEO Metadata using AI on the server!
     const triggerAIMetadataCrafting = async () => {
+        if (uploadSource === "local") {
+            if (!localVideoFile) {
+                triggerToast("Please select or drop a local video file first.", "info");
+                return;
+            }
+            setIsGeneratingMeta(true);
+            setAiGrowthInsights([]);
+            try {
+                const res = await fetch("/api/youtube/generate-meta", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        isLocalVideo: true,
+                        localFileName: localVideoFile.name,
+                        localFileSize: localVideoFile.size,
+                        localFileType: localVideoFile.type,
+                        customVibePrompt: customVibePrompt
+                    })
+                });
+
+                if (!res.ok) {
+                    throw new Error("Copywriting agent online query status offline.");
+                }
+
+                const data = await res.json();
+                if (data.title) setVideoTitle(data.title);
+                if (data.description) setVideoDescription(data.description);
+                if (data.tags) setVideoTags(data.tags);
+                if (data.growthInsights && Array.isArray(data.growthInsights)) {
+                    setAiGrowthInsights(data.growthInsights);
+                }
+                triggerToast("Video content analyzed successfully via Gemini AI!", "success");
+            } catch (err) {
+                triggerToast("AI generator proxy offline. Applying high-retention template payload.", "info");
+                const cleanName = localVideoFile.name.replace(/\.[^/.]+$/, "");
+                setVideoTitle(`🔥 ${cleanName.toUpperCase()} (Official Release Visuals) • [OGBEATZ]`);
+                setVideoDescription(
+                    `⚡ Official visual release for "${cleanName}".\n\n` +
+                    `🎬 VIDEO ASSET DETAILS:\n` +
+                    `- Filename: ${localVideoFile.name}\n` +
+                    `- Format Speeds: Optimized 4K Video Stream\n` +
+                    `- Stylistic vibe description: ${customVibePrompt || "High-vibe contemporary music release"}\n\n` +
+                    `🎹 BRAND & PRODUCTION PLATFORM:\n` +
+                    `- Master Production: OGBeatz Studio Console\n` +
+                    `- Licensing Status: Pre-qualified for monetization on all networks\n\n` +
+                    `📧 Business & Sync inquiries: cdtfullsail@gmail.com\n\n` +
+                    `© Licensed via automated Blockchain contract. Unauthorized uploads will query automated claims-match.`
+                );
+                setVideoTags("OGBeatz, VideoRelease, MasteredEngine, MusicVideo, CyberVisual, Cinematic");
+                setAiGrowthInsights([
+                    "Retention advice: Add a high-contrast soundwave visual overlay to keep visual interest constant.",
+                    "SEO guidance: Add 3 related artist names to the tags list to drive algorithmic piggybacking.",
+                    "Shorts tip: Cut a 15-second portrait snippet of the drop phase to capture active scrolling traffic."
+                ]);
+            } finally {
+                setIsGeneratingMeta(false);
+            }
+            return;
+        }
+
+        // Existing studio track flow
         const video = promoVideos.find(v => v.id === selectedVideoId);
         if (!selectedVideoId || !video) {
             triggerToast("Please pick an AI video asset to feed our copyrighting engine.", "info");
@@ -344,6 +409,7 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
         if (!track) return;
 
         setIsGeneratingMeta(true);
+        setAiGrowthInsights([]);
         try {
             const res = await fetch("/api/youtube/generate-meta", {
                 method: "POST",
@@ -372,6 +438,9 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
             if (data.tags) {
                 setVideoTags(data.tags);
             }
+            if (data.growthInsights && Array.isArray(data.growthInsights)) {
+                setAiGrowthInsights(data.growthInsights);
+            }
             triggerToast("Seeding tags and dynamic metadata optimized via Gemini AI successfully!", "success");
 
         } catch (err: any) {
@@ -391,6 +460,11 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
                 `© This composition is protected globally by real-time automated sync licensing logs.`
             );
             setVideoTags(tagsList.join(", "));
+            setAiGrowthInsights([
+                "Consider releasing a 9:16 vertical TikTok/Shorts version to amplify algorithmic feed presence.",
+                "Verify high-definition render specs match exact H.264 formats to skip double encoding on YouTube core.",
+                "Insert precise interactive hyper-links for instant leasing in the first 3 lines of your description to maximize CTR."
+            ]);
         } finally {
             setIsGeneratingMeta(false);
         }
@@ -399,8 +473,12 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
     // YouTube Upload & Publish Execution Pipeline
     const executeYouTubePublish = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedVideoId) {
+        if (uploadSource === "studio" && !selectedVideoId) {
             triggerToast("Choose a promotional visualizer file to publish.", "error");
+            return;
+        }
+        if (uploadSource === "local" && !localVideoFile) {
+            triggerToast("Please upload or select a local video file.", "error");
             return;
         }
         if (!videoTitle.trim()) {
@@ -413,11 +491,18 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
         setPublishingLogs(["[Thread Init] Spawning video parser controller..."]);
 
         // Multi-stage status pipeline
-        const stages = [
+        const stages = uploadSource === "local" ? [
+            { p: 12, msg: `Encoding local video stream "${localVideoFile?.name}"...`, log: `[Encoder] Optimizing local multi-pass H.264 wrapper speed. File size: ${Math.round((localVideoFile?.size || 0) / 1024 / 1024 * 105) / 100} MB` },
+            { p: 32, msg: "Re-indexing codec sound frequencies...", log: "[Packer] Checking high-fidelity AAC structural audio tracks" },
+            { p: 58, msg: "Uploading chunks to official Google servers...", log: "[API Ingest] Streaming video packets to secure YouTube Data API upload endpoint" },
+            { p: 82, msg: "Attaching tags, description chapters and keyword payloads...", log: `[Metadata Sync] Injecting title: "${videoTitle}" (Privacy: ${privacyStatus})` },
+            { p: 95, msg: "Compiling video index and high-contrast visuals...", log: "[Google API] Generating high-resolution default cover placeholder" },
+            { p: 100, msg: "Successfully hosted and available live!", log: "[Success] File successfully deployed to your YouTube video catalog!" }
+        ] : [
             { p: 15, msg: "Compressing cyber-organic visual graphics...", log: "[Encoder] Direct rendering down-sampling to optimal web specs (1080p WebM stream)" },
             { p: 35, msg: "Compiling audio track & dynamic master...", log: "[Transmuxer] Multiplexing high-definition PCM audio file with H.264 video wrapper" },
             { p: 55, msg: "Uploading chunks to YouTube ingest servers...", log: "[API Ingest] Launching chunk upload at https://uploads.youtube.com/api/v3/" },
-            { p: 80, msg: "Attaching labels, SEO tags and description chapters...", log: "[Client API] Patching resource metadata properties (privacy: " + privacyStatus + ")" },
+            { p: 80, msg: "Attaching labels, SEO tags and description chapters...", log: `[Client API] Patching resource metadata properties (privacy: ${privacyStatus})` },
             { p: 95, msg: "Verifying standard & high definition processing...", log: "[Google API] Releasing resource payload with security ID and tracking signature" },
             { p: 100, msg: "Successfully published to YouTube channel!", log: "[Success] Resource successfully processed and online!" }
         ];
@@ -433,13 +518,15 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
             id: `yt_active_${Date.now()}`,
             youtubeId: "dQw4w9WgXcQ",
             title: videoTitle,
-            style: "Cyber-Organic Visualizer",
+            style: uploadSource === "local" ? "Custom Video Upload" : "Cyber-Organic Visualizer",
             views: 0,
             likes: 0,
             commentsCount: 0,
             visibility: privacyStatus,
             publishedAt: "Just now",
-            thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=250&auto=format&fit=crop"
+            thumbnailUrl: uploadSource === "local" 
+                ? "https://images.unsplash.com/photo-1542204172-e7052809a1a4?q=80&w=250&auto=format&fit=crop"
+                : "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=250&auto=format&fit=crop"
         };
 
         setPublishedVideos(prev => [fakeNewVideo, ...prev]);
@@ -452,6 +539,9 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
             setVideoTitle("");
             setVideoDescription("");
             setVideoTags("");
+            setLocalVideoFile(null);
+            setCustomVibePrompt("");
+            setAiGrowthInsights([]);
         }, 1500);
     };
 
@@ -936,37 +1026,175 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
             {/* SECTION: 2. PUBLISH VIDEO */}
             {activeTab === "upload" && (
                 <div className="space-y-8">
-                    <div>
-                        <h2 className="text-lg font-black tracking-tight uppercase text-zinc-300">Publish Asset Pipeline</h2>
-                        <p className="text-zinc-500 text-xs mt-1">Cross-host existing cinematic rendering files immediately to YouTube with complete metadata presets.</p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h2 className="text-lg font-black tracking-tight uppercase text-zinc-300">Publish Asset Pipeline</h2>
+                            <p className="text-zinc-500 text-xs mt-1">Cross-host existing cinematic rendering files immediately to YouTube with complete metadata presets.</p>
+                        </div>
+
+                        {/* Source Selector tabs */}
+                        <div className="flex bg-zinc-950 p-1 border border-zinc-900 rounded-2xl max-w-sm shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setUploadSource("studio");
+                                    setLocalVideoFile(null);
+                                    setCustomVibePrompt("");
+                                    setAiGrowthInsights([]);
+                                }}
+                                className={`py-2 px-3.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${uploadSource === "studio" ? "bg-zinc-900 text-orange-500 border border-zinc-800" : "text-zinc-500 hover:text-zinc-300"}`}
+                            >
+                                <Video className="w-4 h-4" />
+                                Studio Assets
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setUploadSource("local");
+                                    setSelectedVideoId("");
+                                    setVideoTitle("");
+                                    setVideoDescription("");
+                                    setVideoTags("");
+                                    setAiGrowthInsights([]);
+                                }}
+                                className={`py-2 px-3.5 rounded-xl text-[10px] font-mono font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${uploadSource === "local" ? "bg-zinc-900 text-orange-500 border border-zinc-800" : "text-zinc-500 hover:text-zinc-300"}`}
+                            >
+                                <Upload className="w-4 h-4" />
+                                Local Video File
+                            </button>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                         {/* Video Form Controls */}
                         <form onSubmit={executeYouTubePublish} className="lg:col-span-3 bg-zinc-950 border border-zinc-900 p-8 rounded-[2.5rem] shadow-2xl space-y-6">
-                            {/* Visual Asset Picker */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 font-mono block">
-                                    1. Choose Complete Promo Video Rendering
-                                </label>
-                                <select
-                                    value={selectedVideoId}
-                                    onChange={(e) => handleAssetSelect(e.target.value)}
-                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-xs text-white focus:outline-none focus:border-orange-500 cursor-pointer font-sans"
-                                >
-                                    <option value="" className="text-zinc-600">-- Click to pick an AI promo visualizer file --</option>
-                                    {promoVideos.map(video => {
-                                        const t = tracks.find(track => track.id === video.track_id);
-                                        const p = playlists.find(pl => pl.id === video.playlist_id);
-                                        const ref = t?.name || p?.name || "Render Asset";
-                                        return (
-                                            <option key={video.id} value={video.id}>
-                                                {ref} ({video.style} - {video.aspectRatio || "Aspect 16:9"})
-                                            </option>
-                                        );
-                                    })}
-                                </select>
-                            </div>
+                            
+                            {uploadSource === "studio" ? (
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 font-mono block">
+                                        1. Choose Complete Promo Video Rendering
+                                    </label>
+                                    <select
+                                        value={selectedVideoId}
+                                        onChange={(e) => handleAssetSelect(e.target.value)}
+                                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-xs text-white focus:outline-none focus:border-orange-500 cursor-pointer font-sans"
+                                    >
+                                        <option value="" className="text-zinc-600">-- Click to pick an AI promo visualizer file --</option>
+                                        {promoVideos.map(video => {
+                                            const t = tracks.find(track => track.id === video.track_id);
+                                            const p = playlists.find(pl => pl.id === video.playlist_id);
+                                            const ref = t?.name || p?.name || "Render Asset";
+                                            return (
+                                                <option key={video.id} value={video.id}>
+                                                    {ref} ({video.style} - {video.aspectRatio || "Aspect 16:9"})
+                                                </option>
+                                            );
+                                        })}
+                                    </select>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 font-mono block">
+                                        1. Drag & Drop or Choose Local Video File
+                                    </label>
+
+                                    {!localVideoFile ? (
+                                        <div 
+                                            className="border-2 border-dashed border-zinc-800 bg-zinc-900/10 hover:bg-zinc-900/30 hover:border-orange-500/40 transition-all rounded-[1.8rem] p-8 flex flex-col items-center justify-center gap-3.5 text-center cursor-pointer min-h-[160px]"
+                                            onDragOver={(e) => e.preventDefault()}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                const file = e.dataTransfer.files?.[0];
+                                                if (file) {
+                                                    if (file.type.startsWith("video/")) {
+                                                        setLocalVideoFile({
+                                                            name: file.name,
+                                                            size: file.size,
+                                                            type: file.type
+                                                        });
+                                                        const cleanName = file.name.replace(/\.[^/.]+$/, "");
+                                                        setVideoTitle(`🔥 ${cleanName.toUpperCase()} • Official Video Release`);
+                                                        triggerToast(`Staged video: "${file.name}"`, "success");
+                                                    } else {
+                                                        triggerToast("Please choose or drop a standard video format file (.mp4, .mov, .webm).", "error");
+                                                    }
+                                                }
+                                            }}
+                                            onClick={() => {
+                                                const select = document.createElement("input");
+                                                select.type = "file";
+                                                select.accept = "video/*";
+                                                select.onchange = (e) => {
+                                                    const file = (e.target as HTMLInputElement).files?.[0];
+                                                    if (file) {
+                                                        setLocalVideoFile({
+                                                            name: file.name,
+                                                            size: file.size,
+                                                            type: file.type
+                                                        });
+                                                        const cleanName = file.name.replace(/\.[^/.]+$/, "");
+                                                        setVideoTitle(`🔥 ${cleanName.toUpperCase()} • Official Video Release`);
+                                                        triggerToast(`Staged video: "${file.name}"`, "success");
+                                                    }
+                                                };
+                                                select.click();
+                                            }}
+                                        >
+                                            <div className="w-11 h-11 rounded-2xl bg-zinc-900 flex items-center justify-center border border-zinc-850">
+                                                <Upload className="w-5 h-5 text-zinc-550" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-zinc-300">Click to locate, or drag-and-drop dynamic file here</p>
+                                                <p className="text-[10px] text-zinc-500 mt-1 font-mono">Accepts MP4, MKV, MOV, WEBM (Safe local buffering)</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between gap-4">
+                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                <div className="w-10 h-10 rounded-xl bg-green-950/20 border border-green-900/30 flex items-center justify-center shrink-0">
+                                                    <CheckCircle className="w-5 h-5 text-green-500" />
+                                                </div>
+                                                <div className="overflow-hidden">
+                                                    <h4 className="text-xs font-bold text-zinc-200 truncate pr-4">{localVideoFile.name}</h4>
+                                                    <p className="text-[9px] font-mono text-zinc-550 mt-0.5">
+                                                        Size: {Math.round(localVideoFile.size / 1024 / 1024 * 100) / 100} MB • Codec: {localVideoFile.type || "video/mp4"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setLocalVideoFile(null);
+                                                    setVideoTitle("");
+                                                    setVideoDescription("");
+                                                    setVideoTags("");
+                                                    setCustomVibePrompt("");
+                                                    setAiGrowthInsights([]);
+                                                    triggerToast("Cleared uploaded video file setup.", "info");
+                                                }}
+                                                className="p-2 border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 rounded-xl transition-all cursor-pointer shrink-0"
+                                                title="Remove local visual asset"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Optional Style Direction descriptor */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black uppercase tracking-wider text-zinc-500 font-mono block">
+                                            Optional: Style / Vibe Context for AI Metadata Optimization
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={customVibePrompt}
+                                            onChange={(e) => setCustomVibePrompt(e.target.value)}
+                                            placeholder="E.g., Gritty rap, atmospheric deep red lighting, heavy retro theme..."
+                                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-orange-500 font-sans"
+                                        />
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Enhanced copy tools banner */}
                             <div className="flex items-center justify-between bg-zinc-900/50 border border-zinc-850 p-4 rounded-2xl gap-4">
@@ -980,7 +1208,7 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
                                 <button
                                     type="button"
                                     onClick={triggerAIMetadataCrafting}
-                                    disabled={!selectedVideoId || isGeneratingMeta}
+                                    disabled={(uploadSource === "studio" ? !selectedVideoId : !localVideoFile) || isGeneratingMeta}
                                     className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:hover:bg-zinc-800 rounded-xl text-[8.5px] font-mono font-black uppercase tracking-widest text-orange-500 transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border border-zinc-700/60"
                                 >
                                     {isGeneratingMeta ? (
@@ -1062,12 +1290,11 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
 
                             {/* Submit Row */}
                             <div className="pt-4 flex items-center justify-between border-t border-zinc-900/50">
-                                <span className="text-[9px] font-mono tracking-wider text-zinc-500 uppercase font-semibold">
+                                <span className="text-[9px] font-mono tracking-wider text-zinc-550 uppercase font-semibold">
                                     Ready to publish video resource
                                 </span>
                                 <button
                                     type="submit"
-                                    maxLength={100}
                                     disabled={uploadProgress !== null}
                                     className="flex items-center gap-2 px-8 py-3 bg-red-650 hover:bg-red-700 text-white font-black uppercase text-[10px] tracking-widest rounded-xl shadow-lg shadow-red-700/10 hover:shadow-red-700/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                                 >
@@ -1103,28 +1330,66 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
                                                 </div>
                                                 <div>
                                                     <h4 className="text-[11px] font-black uppercase text-white truncate max-w-sm">{track?.name || "Premium Release Asset"}</h4>
-                                                    <p className="text-[9px] font-mono text-zinc-500 uppercase mt-0.5 tracking-wider font-bold">
+                                                    <p className="text-[9px] font-mono text-zinc-550 uppercase mt-0.5 tracking-wider font-bold">
                                                         Aspect: {selected?.aspectRatio || "16:9"} • Style: {selected?.style || "Modern"}
                                                     </p>
                                                 </div>
                                             </div>
                                         );
                                     })()
+                                ) : localVideoFile ? (
+                                    <div className="my-4 space-y-4">
+                                        <div className="aspect-video relative rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 flex flex-col items-center justify-center p-6 text-center">
+                                            <Video className="w-8 h-8 text-orange-500 mb-2 animate-pulse" />
+                                            <span className="text-[10px] font-bold text-zinc-300 truncate max-w-[170px]">{localVideoFile.name}</span>
+                                            <span className="text-[8.5px] text-zinc-550 font-mono mt-0.5">{Math.round(localVideoFile.size / 1024 / 1024 * 100) / 100} MB</span>
+                                        </div>
+                                        <div>
+                                            <h4 className="text-[11px] font-black uppercase text-white truncate max-w-sm">{videoTitle || "Staged Custom Video"}</h4>
+                                            <p className="text-[9px] font-mono text-zinc-400 uppercase mt-1 tracking-wider font-semibold">
+                                                Source: Local Upload File • Status: Video Buffered
+                                            </p>
+                                        </div>
+                                    </div>
                                 ) : (
                                     <div className="my-8 flex flex-col items-center text-center space-y-3.5">
                                         <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-650">
                                             <Video className="w-6 h-6" />
                                         </div>
                                         <p className="text-[10px] text-zinc-550 max-w-[200px] leading-relaxed">
-                                            Select a visualizer file in dropdown to activate real-time resource preview map.
+                                            {uploadSource === "local" ? "Drop or select a video file in the input zone to activate local preview blueprint." : "Select a visualizer file in the dropdown to activate real-time resource preview map."}
                                         </p>
                                     </div>
                                 )}
 
-                                <div className="border-t border-zinc-900/55 pt-3.5 text-[8px] font-mono text-zinc-600 uppercase tracking-widest font-black leading-none">
-                                    Format: MP4 Container Structure
+                                <div className="border-t border-zinc-900/55 pt-3.5 text-[8px] font-mono text-zinc-650 uppercase tracking-widest font-black leading-none">
+                                    Format: {uploadSource === "local" && localVideoFile ? localVideoFile.type : "MP4 Container Structure"}
                                 </div>
                             </div>
+
+                            {/* AI Growth Strategy Advisor */}
+                            {aiGrowthInsights.length > 0 && (
+                                <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-[2.5rem] shadow-xl space-y-3.5 animate-fadeIn">
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles className="w-4 h-4 text-orange-500 shrink-0 animate-pulse" />
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-300 block font-mono">
+                                            AI Growth Strategy Advice
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2.5">
+                                        {aiGrowthInsights.map((insight, idx) => (
+                                            <div key={idx} className="bg-zinc-900/40 border border-zinc-850 p-3.5 rounded-2xl flex gap-3.5 items-start">
+                                                <div className="w-5.5 h-5.5 rounded-lg bg-orange-950/20 border border-orange-950/40 flex items-center justify-center text-orange-500 shrink-0 text-[10px] font-black font-mono">
+                                                    {idx + 1}
+                                                </div>
+                                                <p className="text-[10px] text-zinc-400 font-medium leading-relaxed">
+                                                    {insight}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Publishing progress logs */}
                             {uploadProgress !== null && (
