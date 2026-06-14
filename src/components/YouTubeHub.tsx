@@ -235,7 +235,11 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
     const handleGoogleConnect = async () => {
         try {
             setLoading(true);
-            const res = await fetch("/api/youtube/auth-url");
+            try {
+                localStorage.removeItem("YOUTUBE_OAUTH_STATUS");
+            } catch (e) {}
+
+            const res = await fetch(`/api/youtube/auth-url?origin=${encodeURIComponent(window.location.origin)}`);
             if (!res.ok) {
                 throw new Error("Failed to compile authorization endpoints.");
             }
@@ -276,12 +280,28 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
             
             // Cleanup on window closure
             const timer = setInterval(() => {
+                // Secondary fallback via localStorage
+                try {
+                    const status = localStorage.getItem("YOUTUBE_OAUTH_STATUS");
+                    if (status === "SUCCESS") {
+                        localStorage.removeItem("YOUTUBE_OAUTH_STATUS");
+                        triggerToast("YouTube API successfully authorized via storage sync!", "success");
+                        fetchAuthState();
+                        syncLiveYouTubeData();
+                        clearInterval(timer);
+                        window.removeEventListener("message", handleMessage);
+                        authWindow.close();
+                        setLoading(false);
+                        return;
+                    }
+                } catch (e) {}
+
                 if (authWindow.closed) {
                     clearInterval(timer);
                     window.removeEventListener("message", handleMessage);
                     setLoading(false);
                 }
-            }, 1000);
+            }, 800);
 
         } catch (err: any) {
             triggerToast(`Could not authenticate with Google: ${err.message || err}`, "error");

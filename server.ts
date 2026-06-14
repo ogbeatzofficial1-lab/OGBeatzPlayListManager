@@ -1023,11 +1023,15 @@ Rules:
     const protocol = rawProto.split(",")[0].trim();
     const rawHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || req.headers.host || "localhost:3000";
     const host = rawHost.split(",")[0].trim();
-    const origin = `${protocol}://${host}`;
+    const defaultOrigin = `${protocol}://${host}`;
+
+    // Prefer client-passed origin to avoid proxy/port resolving issues
+    const clientOrigin = req.query.origin as string;
+    const origin = (clientOrigin && clientOrigin.startsWith("http")) ? clientOrigin : defaultOrigin;
     const redirectUri = `${origin}/api/youtube/callback`;
 
     if (!oClientId) {
-      const mockAuthorizeUrl = `${origin}/api/youtube/callback?code=mock_google_oauth_code_ogbeatz`;
+      const mockAuthorizeUrl = `${origin}/api/youtube/callback?code=mock_google_oauth_code_ogbeatz&state=${encodeURIComponent(origin)}`;
       res.json({ url: mockAuthorizeUrl });
       return;
     }
@@ -1038,7 +1042,8 @@ Rules:
       response_type: "code",
       scope: "https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.upload",
       access_type: "offline",
-      prompt: "consent"
+      prompt: "consent",
+      state: origin // Save original origin inside state to recover on callback
     });
 
     res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
@@ -1046,7 +1051,17 @@ Rules:
 
   // 3. OAuth Callback Handler
   app.get(["/api/youtube/callback", "/api/youtube/callback/"], async (req, res) => {
-    const { code } = req.query;
+    const { code, state } = req.query;
+
+    // Recover target origin from state parameter if present, otherwise fallback
+    const rawProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "http";
+    const protocol = rawProto.split(",")[0].trim();
+    const rawHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || req.headers.host || "localhost:3000";
+    const host = rawHost.split(",")[0].trim();
+    const defaultOrigin = `${protocol}://${host}`;
+
+    const origin = (state && typeof state === "string" && state.startsWith("http")) ? state : defaultOrigin;
+    const redirectUri = `${origin}/api/youtube/callback`;
 
     if (code === "mock_google_oauth_code_ogbeatz" || !process.env.GOOGLE_CLIENT_ID) {
       googleAuthSession = {
@@ -1059,12 +1074,6 @@ Rules:
       };
     } else {
       try {
-        const rawProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "http";
-        const protocol = rawProto.split(",")[0].trim();
-        const rawHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || req.headers.host || "localhost:3000";
-        const host = rawHost.split(",")[0].trim();
-        const origin = `${protocol}://${host}`;
-        const redirectUri = `${origin}/api/youtube/callback`;
         const exchangeRes = await fetch("https://oauth2.googleapis.com/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -1115,6 +1124,11 @@ Rules:
       <html>
         <body style="background-color:#020202; color:#fff; font-family:sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; text-align:center;">
           <script>
+            try {
+              localStorage.setItem("YOUTUBE_OAUTH_STATUS", "SUCCESS");
+            } catch (e) {
+              console.warn("Failed to write to localStorage fallback:", e);
+            }
             if (window.opener) {
               window.opener.postMessage({ type: "OAUTH_AUTH_SUCCESS" }, "*");
               window.close();
