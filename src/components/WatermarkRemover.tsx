@@ -30,6 +30,9 @@ export default function WatermarkRemover() {
   const [ghostcutMode, setGhostcutMode] = useState<GhostCutMode>('remove_watermark');
   const [useInpainting, setUseInpainting] = useState<boolean>(true); // TRUE = Blur-Free Crisp AI
   const [hdUpscale, setHdUpscale] = useState<boolean>(false);
+  const [processRange, setProcessRange] = useState<'preview' | 'full' | 'custom'>('full');
+  const [customStart, setCustomStart] = useState<number>(0);
+  const [customEnd, setCustomEnd] = useState<number>(30);
 
   // Initialize with 3 default watermark locations (e.g., top-left, top-right, bottom-right)
   const [watermarkBoxes, setWatermarkBoxes] = useState([
@@ -260,15 +263,6 @@ export default function WatermarkRemover() {
       return;
     }
 
-    // Fall back to local render simulation if local file trigger detected
-    if (selectedVideoUrl.startsWith("blob:")) {
-      setProcessingStep("Local file blob detected. Syncing to temporary Cloud proxy bucket...");
-      setProcessingProgress(15);
-      await new Promise(r => setTimeout(r, 1500));
-      await runLocalDSPCancellation();
-      return;
-    }
-
     // Real API Proxy call to /api/ghostcut/submit-task
     setProcessingStep("Submitting video pipeline to GhostCut cloud compiler...");
     setProcessingProgress(25);
@@ -277,7 +271,17 @@ export default function WatermarkRemover() {
       // 1. Get the real natural resolution of the source video
       const videoWidth = videoRef.current?.videoWidth || 1920;
       const videoHeight = videoRef.current?.videoHeight || 1080;
-      const totalVideoDuration = videoRef.current?.duration || 0;
+      const totalDuration = videoRef.current?.duration || 60;
+
+      let startFrameTime = 0;
+      let endFrameTime = Math.round(totalDuration);
+
+      if (processRange === 'preview') {
+        endFrameTime = 5; // Force stop processing at 5 seconds
+      } else if (processRange === 'custom') {
+        startFrameTime = customStart;
+        endFrameTime = customEnd;
+      }
 
       // 2. Map percentage watermark boxes to absolute frame dimensions (pixel counts)
       // for exact matching across rapidapi or direct tokens as required by GhostCut core
@@ -286,27 +290,57 @@ export default function WatermarkRemover() {
         y: Math.round((box.y / 100) * videoHeight),
         w: Math.round((box.w / 100) * videoWidth),
         h: Math.round((box.h / 100) * videoHeight),
-        start_time: 0,
-        end_time: Math.round(totalVideoDuration)
+        start_time: startFrameTime, // 🌟 UI Selected Start Time
+        end_time: endFrameTime      // 🌟 UI Selected End Time
       }));
 
-      const payload = {
-        apiKey,
-        videoUrl: selectedVideoUrl,
-        apiProvider,
-        mode: ghostcutMode,
-        inpainting: useInpainting,
-        apply_to_all_frames: true,
-        duration: Math.round(totalVideoDuration),
-        total_video_duration: Math.round(totalVideoDuration),
-        regions: ghostcutMode === 'remove_watermark' ? ghostcutBoxes : null
-      };
+      let submitRes;
 
-      const submitRes = await fetch("/api/ghostcut/submit-task", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      if (videoFile) {
+        setProcessingStep("Uploading video file directly to GhostCut API proxy...");
+        setProcessingProgress(35);
+
+        const formData = new FormData();
+        formData.append("apiKey", apiKey);
+        if (apiProvider) formData.append("apiProvider", apiProvider);
+        formData.append("mode", ghostcutMode);
+        formData.append("inpainting", String(useInpainting));
+        formData.append("apply_to_all_frames", "true");
+        formData.append("duration", String(endFrameTime - startFrameTime));
+        formData.append("total_video_duration", String(Math.round(totalDuration)));
+        
+        // Append raw video file binary
+        formData.append("file", videoFile);
+        formData.append("video_file", videoFile);
+
+        if (ghostcutMode === 'remove_watermark') {
+          formData.append("regions", JSON.stringify(ghostcutBoxes));
+          formData.append("rect_array", JSON.stringify(ghostcutBoxes));
+        }
+
+        submitRes = await fetch("/api/ghostcut/submit-task", {
+          method: "POST",
+          body: formData
+        });
+      } else {
+        const payload = {
+          apiKey,
+          videoUrl: selectedVideoUrl,
+          apiProvider,
+          mode: ghostcutMode,
+          inpainting: useInpainting,
+          apply_to_all_frames: true,
+          duration: endFrameTime - startFrameTime,
+          total_video_duration: Math.round(totalDuration),
+          regions: ghostcutMode === 'remove_watermark' ? ghostcutBoxes : null
+        };
+
+        submitRes = await fetch("/api/ghostcut/submit-task", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      }
 
       if (!submitRes.ok) {
         const errorData = await submitRes.json();
@@ -695,6 +729,66 @@ export default function WatermarkRemover() {
               <option value="remove_subtitles">Auto Subtitle Eraser (Whole Video Search)</option>
               <option value="video_crop">Smart Auto-Crop Video</option>
             </select>
+          </div>
+
+          {/* Processing Range Selector */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-slate-400 uppercase tracking-widest block">Processing Range</label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setProcessRange('preview')}
+                className={`p-2 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
+                  processRange === 'preview' ? 'bg-blue-600 border-blue-500 text-white font-bold' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                }`}
+              >
+                ⚡ 5s Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => setProcessRange('full')}
+                className={`p-2 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
+                  processRange === 'full' ? 'bg-blue-600 border-blue-500 text-white font-bold' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                }`}
+              >
+                🎬 Full Video
+              </button>
+              <button
+                type="button"
+                onClick={() => setProcessRange('custom')}
+                className={`p-2 text-xs font-medium rounded-lg border transition-all cursor-pointer ${
+                  processRange === 'custom' ? 'bg-blue-600 border-blue-500 text-white font-bold' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                }`}
+              >
+                ⏱️ Custom
+              </button>
+            </div>
+
+            {/* Show custom second inputs only if they click Custom Range */}
+            {processRange === 'custom' && (
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div>
+                  <span className="text-[11px] text-slate-500 block mb-1">Start (seconds)</span>
+                  <input 
+                    type="number" 
+                    value={customStart} 
+                    min={0}
+                    onChange={(e) => setCustomStart(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-xs text-mono text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-500 block mb-1">End (seconds)</span>
+                  <input 
+                    type="number" 
+                    value={customEnd} 
+                    min={0}
+                    onChange={(e) => setCustomEnd(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-xs text-mono text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Cleanliness Strategy Toggle */}
