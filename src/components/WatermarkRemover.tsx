@@ -277,6 +277,7 @@ export default function WatermarkRemover() {
       // 1. Get the real natural resolution of the source video
       const videoWidth = videoRef.current?.videoWidth || 1920;
       const videoHeight = videoRef.current?.videoHeight || 1080;
+      const videoDuration = videoRef.current?.duration || 0;
 
       // 2. Map percentage watermark boxes to absolute frame dimensions (pixel counts)
       // for exact matching across rapidapi or direct tokens as required by GhostCut core
@@ -284,7 +285,9 @@ export default function WatermarkRemover() {
         x: Math.round((box.x / 100) * videoWidth),
         y: Math.round((box.y / 100) * videoHeight),
         w: Math.round((box.w / 100) * videoWidth),
-        h: Math.round((box.h / 100) * videoHeight)
+        h: Math.round((box.h / 100) * videoHeight),
+        start_time: 0,
+        end_time: Math.round(videoDuration)
       }));
 
       const payload = {
@@ -293,6 +296,7 @@ export default function WatermarkRemover() {
         apiProvider,
         mode: ghostcutMode,
         inpainting: useInpainting,
+        apply_to_all_frames: true,
         regions: ghostcutMode === 'remove_watermark' ? ghostcutBoxes : null
       };
 

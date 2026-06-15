@@ -1913,13 +1913,19 @@ Return valid JSON with the single key: 'replyText'.`;
         requestBody.inpainting = req.body.inpainting;
       }
 
+      if (typeof req.body.apply_to_all_frames !== 'undefined') {
+        requestBody.apply_to_all_frames = req.body.apply_to_all_frames;
+      }
+
       // Support multi-box region bounds
       if (regions && Array.isArray(regions) && regions.length > 0) {
         const mappedBoxes = regions.map((r: any) => ({
           x: typeof r.x === 'number' ? r.x : 0,
           y: typeof r.y === 'number' ? r.y : 0,
           w: typeof r.w === 'number' ? r.w : 20,
-          h: typeof r.h === 'number' ? r.h : 10
+          h: typeof r.h === 'number' ? r.h : 10,
+          start_time: typeof r.start_time === 'number' ? r.start_time : 0,
+          end_time: typeof r.end_time === 'number' ? r.end_time : 0
         }));
         requestBody.regions = mappedBoxes;
         requestBody.rect_array = mappedBoxes; // mirror standard rect_array
@@ -1929,7 +1935,9 @@ Return valid JSON with the single key: 'replyText'.`;
           x: regionCoordinates.x || 0,
           y: regionCoordinates.y || 0,
           w: regionCoordinates.w || 20,
-          h: regionCoordinates.h || 10
+          h: regionCoordinates.h || 10,
+          start_time: regionCoordinates.start_time || 0,
+          end_time: regionCoordinates.end_time || 0
         };
         requestBody.regions = [singleBox];
         requestBody.rect_array = [singleBox];
