@@ -295,9 +295,57 @@ export default function WatermarkRemover() {
       }));
 
       let submitRes;
+      let uploadToSupabaseSuccess = false;
+      let finalVideoUrl = selectedVideoUrl;
 
       if (videoFile) {
-        setProcessingStep("Uploading video file directly to GhostCut API proxy...");
+        setProcessingStep("Uploading video file to secure Cloud Storage via Supabase...");
+        setProcessingProgress(30);
+
+        try {
+          const { supabase } = await import('../lib/supabase');
+          const fileExt = videoFile.name.split('.').pop() || 'mp4';
+          const filePath = `raw_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+          const bucket = 'promo_videos';
+
+          let { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, videoFile);
+
+          // If bucket doesn't exist, try to create it and retry once
+          if (uploadError && (
+            uploadError.message?.includes('Bucket not found') || 
+            (uploadError as any).status === 404 ||
+            uploadError.message === 'Bucket not found'
+          )) {
+            console.log(`Bucket '${bucket}' not found. Attempting auto-creation...`);
+            try {
+              const { error: bucketError } = await supabase.storage.createBucket(bucket, { public: true });
+              if (!bucketError) {
+                const { error: retryError } = await supabase.storage.from(bucket).upload(filePath, videoFile);
+                uploadError = retryError;
+              }
+            } catch (err) {
+              console.warn("Unable to create bucket automatically:", err);
+            }
+          }
+
+          if (!uploadError) {
+            const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+            if (data?.publicUrl) {
+              finalVideoUrl = data.publicUrl;
+              uploadToSupabaseSuccess = true;
+              console.log("Successfully uploaded to Supabase Storage:", finalVideoUrl);
+              addToast("Direct Cloud Storage upload complete! Bypassing local proxies.", "success");
+            }
+          } else {
+            console.warn("Supabase upload returned error:", uploadError);
+          }
+        } catch (e) {
+          console.error("Direct Supabase upload error:", e);
+        }
+      }
+
+      if (videoFile && !uploadToSupabaseSuccess) {
+        setProcessingStep("Supabase direct upload skipped/failed. Uploading video file via proxy...");
         setProcessingProgress(35);
 
         const formData = new FormData();
@@ -323,9 +371,13 @@ export default function WatermarkRemover() {
           body: formData
         });
       } else {
+        // Either it was already a URL, or the uploaded video successfully went to Supabase Storage!
+        setProcessingStep("Submitting task to GhostCut cloud compiler...");
+        setProcessingProgress(35);
+
         const payload = {
           apiKey,
-          videoUrl: selectedVideoUrl,
+          videoUrl: finalVideoUrl,
           apiProvider,
           mode: ghostcutMode,
           inpainting: useInpainting,
