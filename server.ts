@@ -1259,6 +1259,45 @@ Rules:
     connected: false
   };
 
+  // Helper to dynamically resolve the exact public facing URL (Render, Cloud Run, Local)
+  function getResolvedOrigin(req: express.Request, passedOrigin?: string): string {
+    // 1. If we have a verified client-passed origin, use it
+    if (passedOrigin && passedOrigin.startsWith("http")) {
+      return passedOrigin;
+    }
+
+    // 2. Try process.env.RENDER_EXTERNAL_URL
+    if (process.env.RENDER_EXTERNAL_URL) {
+      return process.env.RENDER_EXTERNAL_URL;
+    }
+
+    // 3. Try to extract from referer header
+    if (req.headers.referer) {
+      try {
+        const parsed = new URL(req.headers.referer).origin;
+        if (parsed && parsed.startsWith("http") && !parsed.includes("localhost:3000")) {
+          return parsed;
+        }
+      } catch (_) {}
+    }
+
+    // 4. Standard Express host resolution
+    const rawProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "http";
+    const protocol = rawProto.split(",")[0].trim();
+    const rawHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || req.headers.host || "localhost:3000";
+    const host = rawHost.split(",")[0].trim();
+    const resolved = `${protocol}://${host}`;
+
+    // If we detect local/internal binding in production, force Render domain
+    if (resolved.includes("localhost") || resolved.includes("127.0.0.1") || resolved.includes("run.app") === false) {
+      if (process.env.NODE_ENV === "production" || process.env.RENDER === "true") {
+        return "https://ogbeatzplaylistmanager.onrender.com";
+      }
+    }
+
+    return resolved;
+  }
+
   // 1. Get Authentication State
   app.get("/api/youtube/state", (req, res) => {
     res.json({
@@ -1272,15 +1311,7 @@ Rules:
   // 2. Generate Google OAuth URL
   app.get("/api/youtube/auth-url", (req, res) => {
     const oClientId = process.env.GOOGLE_CLIENT_ID || "";
-    const rawProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "http";
-    const protocol = rawProto.split(",")[0].trim();
-    const rawHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || req.headers.host || "localhost:3000";
-    const host = rawHost.split(",")[0].trim();
-    const defaultOrigin = `${protocol}://${host}`;
-
-    // Prefer client-passed origin to avoid proxy/port resolving issues
-    const clientOrigin = req.query.origin as string;
-    const origin = (clientOrigin && clientOrigin.startsWith("http")) ? clientOrigin : defaultOrigin;
+    const origin = getResolvedOrigin(req, req.query.origin as string);
     
     const isRenderCallback = origin.includes("onrender.com") || origin.includes("ogbeatzplaylistmanager");
     const callbackPath = isRenderCallback ? "/auth/callback" : "/api/youtube/callback";
@@ -1315,13 +1346,7 @@ Rules:
     }
 
     // Recover target origin from state parameter if present, otherwise fallback
-    const rawProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "http";
-    const protocol = rawProto.split(",")[0].trim();
-    const rawHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || req.headers.host || "localhost:3000";
-    const host = rawHost.split(",")[0].trim();
-    const defaultOrigin = `${protocol}://${host}`;
-
-    const origin = (state && typeof state === "string" && state.startsWith("http")) ? state : defaultOrigin;
+    const origin = getResolvedOrigin(req, (state && typeof state === "string") ? state : undefined);
     const isRenderCallback = origin.includes("onrender.com") || origin.includes("ogbeatzplaylistmanager") || req.path.includes("/auth/callback");
     const callbackPath = isRenderCallback ? "/auth/callback" : "/api/youtube/callback";
     const redirectUri = `${origin}${callbackPath}`;
