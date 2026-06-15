@@ -107,4 +107,6 @@ export interface PromoVideo {
   status: 'processing' | 'ready' | 'error';
   _brokenBlob?: boolean;
   created_at: string;
+  name?: string;
+  title?: string;
 }

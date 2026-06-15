@@ -1722,32 +1722,35 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const addPromoVideo = async (video: Partial<PromoVideo>) => {
-    const videoId = video.id || uuidv4();
-    let videoUrl = video.video_url || '';
-    let thumbnailUrl = video.thumbnail_url || '';
+  const addPromoVideo = async (incomingVideo: Partial<PromoVideo>) => {
+    // 1. CLEAN THE ID: If the ID is a temporary 'local-' string, strip it to force a real UUID!
+    const isTempId = incomingVideo.id?.startsWith('local-');
+    const videoId = (!incomingVideo.id || isTempId) ? uuidv4() : incomingVideo.id;
+    
+    let videoUrl = incomingVideo.video_url || '';
+    let thumbnailUrl = incomingVideo.thumbnail_url || '';
 
-    // 1. Save binary video_data Blob to localforage for high-reliability offline/local caching
-    if (video.video_data instanceof Blob) {
+    // Save binary video_data Blob to localforage for high-reliability offline/local caching
+    if (incomingVideo.video_data instanceof Blob) {
       try {
         const lf = (await import('localforage')).default;
-        await lf.setItem(`promo_video_blob_${videoId}`, video.video_data);
+        await lf.setItem(`promo_video_blob_${videoId}`, incomingVideo.video_data);
         console.log(`Saved video Blob to localforage for ID: ${videoId}`);
       } catch (lfErr) {
         console.warn("Failed to save video Blob to localforage:", lfErr);
       }
     }
 
-    // 2. If online and Supabase is available, attempt real cloud uploads
+    // If online and Supabase is available, attempt real cloud uploads
     if (supabase) {
-      // 2a. Upload video Blob
-      if (video.video_data instanceof Blob) {
+      // Upload video Blob
+      if (incomingVideo.video_data instanceof Blob) {
         try {
           addToast("Uploading render to secure Cloud Vault...", 'info');
           const fileToUpload = new File(
-            [video.video_data], 
+            [incomingVideo.video_data], 
             `${videoId}.mp4`, 
-            { type: video.video_data.type || 'video/mp4' }
+            { type: incomingVideo.video_data.type || 'video/mp4' }
           );
           const uploadedUrl = await uploadFile('promo_videos', fileToUpload);
           if (uploadedUrl) {
@@ -1759,11 +1762,11 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
-      // 2b. Upload thumbnail if custom image_data is provided
-      if (video.thumbnail_data instanceof Blob) {
+      // Upload thumbnail if custom image_data is provided
+      if (incomingVideo.thumbnail_data instanceof Blob) {
         try {
           const thumbToUpload = new File(
-            [video.thumbnail_data],
+            [incomingVideo.thumbnail_data],
             `thumb_${videoId}.jpg`,
             { type: 'image/jpeg' }
           );
@@ -1777,14 +1780,19 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       }
     }
 
+    // 2. CLEAN THE SCHEMA PARAMETERS: Build clean output keys explicitly
+    // This prevents accidental fields like 'title' from bleeding into Supabase insert actions.
+    const { title, id, ...allowedVideoFields } = incomingVideo;
+
     const newVideo: PromoVideo = {
       id: videoId,
       video_url: videoUrl,
       thumbnail_url: thumbnailUrl || '/ogbeatz_logo.svg',
-      style: video.style || 'minimalist',
-      status: video.status || 'ready',
+      style: incomingVideo.style || 'minimalist',
+      status: incomingVideo.status || 'ready',
       created_at: new Date().toISOString(),
-      ...video
+      name: incomingVideo.name || title || 'Watermark Clean Render', // Uses fallback values to protect DB columns
+      ...allowedVideoFields
     };
 
     setPromoVideos(prev => [...prev.filter(v => v.id !== videoId), newVideo]);
