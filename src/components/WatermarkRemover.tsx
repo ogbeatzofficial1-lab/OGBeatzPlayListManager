@@ -427,7 +427,8 @@ export default function WatermarkRemover() {
           const bucket = 'promo_videos';
 
           // 🚀 DIRECT STREAM FIX: Strip options payload to skip the 116ms CORS preflight delay!
-          let { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, videoFile);
+          let { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, videoFile, { cacheControl: '3600', upsert: true });
+
 
           // If bucket doesn't exist, try to create it and retry once
           if (uploadError && (
