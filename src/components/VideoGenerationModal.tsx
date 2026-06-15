@@ -16,7 +16,7 @@ interface VideoGenerationModalProps {
 export default function VideoGenerationModal({ track, playlist, onClose }: VideoGenerationModalProps) {
   const { addPromoVideo, promoVideos, tracks: allTracks, updateTrack, addToast } = useMediaStore();
   const [step, setStep] = useState<'config' | 'processing' | 'preview'>('config');
-  const [style, setStyle] = useState('minimalist');
+  const [style, setStyle] = useState('cyber_organic');
   const [aspectRatio, setAspectRatio] = useState<'vertical' | 'square' | 'horizontal' | 'auto'>('auto');
   const [resolvedAspectRatio, setResolvedAspectRatio] = useState<'vertical' | 'square' | 'horizontal'>('vertical');
   const [progress, setProgress] = useState(0);
@@ -41,8 +41,11 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
   const [pollinationsKeyConnected, setPollinationsKeyConnected] = useState(() => !!localStorage.getItem("POLLINATIONS_USER_KEY"));
 
   const connectPollinations = () => {
-    // Generate simple redirect URI back to the application parent window route
-    const redirectUrl = encodeURIComponent(window.location.href);
+    // Generate simple redirect URI back to the application parent window route or custom callback on render
+    const origin = window.location.origin;
+    const isRender = origin.includes("onrender.com") || origin.includes("ogbeatzplaylistmanager");
+    const targetUrl = isRender ? "https://ogbeatzplaylistmanager.onrender.com/auth/callback" : window.location.href;
+    const redirectUrl = encodeURIComponent(targetUrl);
     const clientId = (import.meta as any).env.VITE_POLLINATIONS_CLIENT_ID || "pk_UkifqMuyjH77QPxB";
     const authUrl = `https://enter.pollinations.ai/authorize?redirect_uri=${redirectUrl}&client_id=${clientId}`;
     
@@ -130,7 +133,8 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     { id: 'minimalist', name: 'Clean Chrome', icon: '✨' },
     { id: 'grunge', name: 'Distressed Metal', icon: '⛓️' },
     { id: 'vibrant', name: 'Neon Pulse', icon: '⚡' },
-    { id: 'abstract', name: 'Ethereal Flow', icon: '🌫️' }
+    { id: 'abstract', name: 'Ethereal Flow', icon: '🌫️' },
+    { id: 'cyber_organic', name: 'Cyber-Organic', icon: '🔥' }
   ];
 
   // Automated Web Audio API Preview Settings
@@ -678,21 +682,59 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     }
 
     // Aspect-ratio layout adaptive coordinates and sizes to make sure it adjusts to ratio perfectly
+    let albumArtX = width / 2;
     let albumArtY = height * 0.38;
+    let textBaseX = width / 2;
     let textBaseY = height * 0.72;
     let waveBaselineY = height * 0.85;
     let albumArtSize = Math.min(width, height) * 0.36;
+    let lyricX = width / 2;
+    let lyricY = height * 0.58;
+    let textAlignment: CanvasTextAlign = 'center';
+
+    let spectralStartX = width * 0.14;
+    let spectralEndX = width * 0.86;
 
     if (aspect === 'square') {
-      albumArtY = height * 0.42;
-      textBaseY = height * 0.78;
+      albumArtX = width / 2;
+      albumArtY = height * 0.40;
+      textBaseX = width / 2;
+      textBaseY = height * 0.76;
       waveBaselineY = height * 0.88;
       albumArtSize = Math.min(width, height) * 0.42;
+      lyricX = width / 2;
+      lyricY = height * 0.60;
+      textAlignment = 'center';
+      
+      spectralStartX = width * 0.12;
+      spectralEndX = width * 0.88;
     } else if (aspect === 'horizontal') {
-      albumArtY = height * 0.45;
-      textBaseY = height * 0.80;
-      waveBaselineY = height * 0.90;
-      albumArtSize = Math.min(width, height) * 0.46;
+      // Split side-by-side bento layout for cinematic landscape videos
+      albumArtX = width * 0.30;
+      albumArtY = height * 0.48;
+      textBaseX = width * 0.70;
+      textBaseY = height * 0.36;
+      waveBaselineY = height * 0.88;
+      albumArtSize = Math.min(width, height) * 0.52;
+      lyricX = width * 0.70;
+      lyricY = height * 0.62;
+      textAlignment = 'center';
+      
+      spectralStartX = width * 0.52;
+      spectralEndX = width * 0.88;
+    } else { // vertical
+      albumArtX = width / 2;
+      albumArtY = height * 0.35;
+      textBaseX = width / 2;
+      textBaseY = height * 0.74;
+      waveBaselineY = height * 0.88;
+      albumArtSize = Math.min(width, height) * 0.45;
+      lyricX = width / 2;
+      lyricY = height * 0.58;
+      textAlignment = 'center';
+      
+      spectralStartX = width * 0.14;
+      spectralEndX = width * 0.86;
     }
 
     const trackName = activeTrack?.name || name;
@@ -816,16 +858,17 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(width / 2, albumArtY, albumArtSize * 0.6 * artScale, 0, Math.PI * 2);
+        ctx.arc(albumArtX, albumArtY, albumArtSize * 0.6 * artScale, 0, Math.PI * 2);
         ctx.stroke();
       }
 
       // Sharp clean waveform lines
       if (showSpectralBars) {
         const barCount = 48;
-        const barWidth = (width * 0.75) / barCount;
+        const totalW = spectralEndX - spectralStartX;
+        const barWidth = totalW / barCount;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-        const startX = width * 0.125;
+        const startX = spectralStartX;
 
         for (let i = 0; i < barCount; i++) {
           const freqVal = freqData[Math.floor((i / barCount) * freqData.length)] || 0;
@@ -842,15 +885,15 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.2)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.rect(width * 0.12 + glitchOffset, height * 0.12, width * 0.76, height * 0.76);
+        ctx.rect(albumArtX - albumArtSize * 1.1 + glitchOffset, albumArtY - albumArtSize * 1.1, albumArtSize * 2.2, albumArtSize * 2.2);
         ctx.stroke();
 
         ctx.strokeStyle = 'rgba(239, 68, 68, 0.15)';
         ctx.beginPath();
-        ctx.moveTo(width / 2 + glitchOffset, 0);
-        ctx.lineTo(width / 2 + glitchOffset, height);
-        ctx.moveTo(0, height / 2);
-        ctx.lineTo(width, height / 2);
+        ctx.moveTo(albumArtX + glitchOffset, 0);
+        ctx.lineTo(albumArtX + glitchOffset, height);
+        ctx.moveTo(0, albumArtY);
+        ctx.lineTo(width, albumArtY);
         ctx.stroke();
       }
 
@@ -860,8 +903,8 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 2.5;
         ctx.beginPath();
-        const startX = width * 0.125;
-        const stepX = (width * 0.75) / points;
+        const startX = spectralStartX;
+        const stepX = (spectralEndX - spectralStartX) / points;
 
         for (let i = 0; i <= points; i++) {
           const freqVal = freqData[Math.floor((i / points) * freqData.length)] || 0;
@@ -877,7 +920,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     } 
     else if (style === 'vibrant') {
       // Glowing ambient overlay
-      const glowGrad = ctx.createRadialGradient(width / 2, albumArtY, 20, width / 2, albumArtY, albumArtSize * 1.1);
+      const glowGrad = ctx.createRadialGradient(albumArtX, albumArtY, 20, albumArtX, albumArtY, albumArtSize * 1.1);
       glowGrad.addColorStop(0, 'rgba(249, 115, 22, 0.04)');
       glowGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.08)');
       glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
@@ -889,7 +932,7 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         const outerRad = albumArtSize * 0.65;
         const numBars = 50;
         ctx.save();
-        ctx.translate(width / 2, albumArtY);
+        ctx.translate(albumArtX, albumArtY);
         ctx.rotate(time * 0.05);
         
         for (let i = 0; i < numBars; i++) {
@@ -916,11 +959,13 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         ctx.strokeStyle = 'rgba(59, 130, 246, 0.45)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        for (let xCoord = 0; xCoord < width; xCoord += 6) {
-          const freqSample = freqData[Math.floor((xCoord / width) * freqData.length)] || 0;
+        const totalW = spectralEndX - spectralStartX;
+        for (let xCoord = spectralStartX; xCoord < spectralEndX; xCoord += 6) {
+          const progress = (xCoord - spectralStartX) / totalW;
+          const freqSample = freqData[Math.floor(progress * freqData.length)] || 0;
           const freqNorm = freqSample / 255;
-          const valY = waveBaselineY + Math.sin(xCoord * 0.007 + time * 1.8) * (24 + freqNorm * 54) + Math.cos(xCoord * 0.015 + time * 2.5) * 12;
-          if (xCoord === 0) ctx.moveTo(xCoord, valY);
+          const valY = waveBaselineY + Math.sin(progress * Math.PI * 3 + time * 1.8) * (24 + freqNorm * 54) + Math.cos(progress * Math.PI * 6 + time * 2.5) * 12;
+          if (xCoord === spectralStartX) ctx.moveTo(xCoord, valY);
           else ctx.lineTo(xCoord, valY);
         }
         ctx.stroke();
@@ -933,8 +978,103 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
           ctx.strokeStyle = `rgba(59, 130, 246, ${0.12 - rNode * 0.03})`;
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.arc(width / 2, albumArtY, albumArtSize * 0.65 * expandFactor, 0, Math.PI * 2);
+          ctx.arc(albumArtX, albumArtY, albumArtSize * 0.65 * expandFactor, 0, Math.PI * 2);
           ctx.stroke();
+        }
+      }
+    } 
+    else if (style === 'cyber_organic') {
+      // 1. Draw elegant concentric metallic silver rings with technical tics around the album art
+      if (showOrbitRings) {
+        ctx.strokeStyle = 'rgba(220, 225, 230, 0.14)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(albumArtX, albumArtY, albumArtSize * 0.62 * artScale, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(220, 225, 230, 0.05)';
+        ctx.beginPath();
+        ctx.arc(albumArtX, albumArtY, albumArtSize * 0.78 * artScale, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Technical rotating cursor ticks matching high-fashion branding
+        ctx.save();
+        ctx.translate(albumArtX, albumArtY);
+        ctx.rotate(time * 0.35);
+        ctx.strokeStyle = 'rgba(249, 115, 22, 0.45)'; // Amber
+        ctx.lineWidth = 2.5;
+        for (let tIdx = 0; tIdx < 4; tIdx++) {
+          const angle = (tIdx / 4) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, albumArtSize * 0.62 * artScale, angle - 0.08, angle + 0.08);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 2. Intense Amber/Fire particle stream pulsing to the rhythmic bounce & BPM
+      ctx.save();
+      const sparkCount = 20;
+      for (let sIdx = 0; sIdx < sparkCount; sIdx++) {
+        const seedVal = Math.sin(sIdx * 291.55) * 0.5 + 0.5;
+        const drift = (time * (0.6 + seedVal * 1.4) + seedVal * 200) % 1;
+        const radius = albumArtSize * (0.55 + seedVal * 1.0) * artScale;
+        const theta = (sIdx / sparkCount) * Math.PI * 2 + Math.sin(time * 0.4 + seedVal * 15) * 0.5;
+        
+        const sparkX = albumArtX + Math.cos(theta) * radius * (1 - drift * 0.15);
+        const sparkY = albumArtY + Math.sin(theta) * radius * (1 - drift * 0.15) - drift * 60;
+        
+        const size = (4.0 * (1 - drift)) * (1.0 + motionPulse * 1.3);
+        
+        // Custom neon-noir amber glow circle
+        const sparkGrad = ctx.createRadialGradient(sparkX, sparkY, 0, sparkX, sparkY, size * 2.2);
+        sparkGrad.addColorStop(0, 'rgba(251, 146, 60, 1.0)'); // Stark Amber
+        sparkGrad.addColorStop(0.35, 'rgba(239, 68, 68, 0.85)'); // Fiery Red
+        sparkGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        
+        ctx.fillStyle = sparkGrad;
+        ctx.beginPath();
+        ctx.arc(sparkX, sparkY, size * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // 3. Dense Obsidian Vignette Overlay
+      const obsidianGrad = ctx.createRadialGradient(albumArtX, albumArtY, albumArtSize * 0.4, albumArtX, albumArtY, albumArtSize * 1.4);
+      obsidianGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      obsidianGrad.addColorStop(0.5, 'rgba(9,9,11,0.55)');
+      obsidianGrad.addColorStop(1, '#09090b');
+      ctx.fillStyle = obsidianGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // 4. Double-sided reactive spectral frequency bars
+      if (showSpectralBars) {
+        const barCount = 44;
+        const startX = spectralStartX;
+        const endX = spectralEndX;
+        const usableWidth = endX - startX;
+        const barWidth = usableWidth / barCount;
+        
+        for (let i = 0; i < barCount; i++) {
+          const freqVal = freqData[Math.floor((i / barCount) * freqData.length)] || 0;
+          const normVal = freqVal / 255;
+          const h = Math.max(3, normVal * 95 + Math.sin(time * 5.5 + i * 0.25) * 6);
+          const drawX = startX + i * barWidth;
+          
+          const isAmber = i % 2 === 0;
+          const barGrad = ctx.createLinearGradient(drawX, waveBaselineY - h/2, drawX, waveBaselineY + h/2);
+          if (isAmber) {
+            barGrad.addColorStop(0, 'rgba(239, 68, 68, 0.1)');
+            barGrad.addColorStop(0.5, 'rgba(249, 115, 22, 0.95)'); // High brightness warm amber
+            barGrad.addColorStop(1, 'rgba(239, 68, 68, 0.1)');
+          } else {
+            barGrad.addColorStop(0, 'rgba(100, 116, 139, 0.1)');
+            barGrad.addColorStop(0.5, 'rgba(226, 232, 240, 0.9)'); // Stark metallic silver
+            barGrad.addColorStop(1, 'rgba(100, 116, 139, 0.1)');
+          }
+          
+          ctx.fillStyle = barGrad;
+          ctx.fillRect(drawX, waveBaselineY - h / 2, barWidth - 1.8, h);
         }
       }
     }
@@ -944,12 +1084,14 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     if (imgElement && albumArtShape !== 'hidden') {
       const artSize = albumArtSize * artScale;
       ctx.save();
-      ctx.translate(width / 2, albumArtY);
+      ctx.translate(albumArtX, albumArtY);
 
       if (style === 'vibrant' || albumArtShape === 'circle') {
         ctx.rotate(time * 0.11);
       } else if (style === 'abstract') {
         ctx.rotate(Math.sin(time * 0.08) * 0.12);
+      } else if (style === 'cyber_organic') {
+        ctx.rotate(Math.sin(time * 0.14) * 0.04 + Math.cos(time * 0.06) * 0.02);
       }
 
       ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
@@ -967,13 +1109,34 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         }
       }
       ctx.clip();
-      ctx.drawImage(imgElement, -artSize / 2, -artSize / 2, artSize, artSize);
+
+      // Non-distortion auto cover fit formatting for non-square album art
+      if (imgElement.width > 0 && imgElement.height > 0) {
+        const imgAR = imgElement.width / imgElement.height;
+        let sWidth = imgElement.width;
+        let sHeight = imgElement.height;
+        let sx = 0;
+        let sy = 0;
+
+        if (imgAR > 1) {
+          // Landscape cover: crop details on left/right to fill the square box beautifully
+          sWidth = imgElement.height;
+          sx = (imgElement.width - sWidth) / 2;
+        } else {
+          // Portrait cover: crop details on top/bottom to fill the square box beautifully
+          sHeight = imgElement.width;
+          sy = (imgElement.height - sHeight) / 2;
+        }
+        ctx.drawImage(imgElement, sx, sy, sWidth, sHeight, -artSize / 2, -artSize / 2, artSize, artSize);
+      } else {
+        ctx.drawImage(imgElement, -artSize / 2, -artSize / 2, artSize, artSize);
+      }
       ctx.restore();
 
       // Central record vinyl marker for vibrant/circular art styles
       if (style === 'vibrant' || albumArtShape === 'circle') {
         ctx.save();
-        ctx.translate(width / 2, albumArtY);
+        ctx.translate(albumArtX, albumArtY);
         ctx.fillStyle = '#18181b';
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
         ctx.lineWidth = 2.5;
@@ -991,18 +1154,21 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
     if (style === 'grunge') {
       ctx.font = '900 italic 13px monospace';
       ctx.fillStyle = '#ef4444';
+    } else if (style === 'cyber_organic') {
+      ctx.font = '900 italic 14px "Space Grotesk", sans-serif';
+      ctx.fillStyle = '#fb923c';
     }
     ctx.textAlign = 'center';
     
     const pulseFade = 0.82 + Math.sin(time * 5) * 0.18;
     ctx.save();
     ctx.globalAlpha = style === 'grunge' ? 1.0 : pulseFade;
-    ctx.fillText(`${trackName.toUpperCase()}`, width / 2, textBaseY);
+    ctx.fillText(`${trackName.toUpperCase()}`, textBaseX, textBaseY);
     ctx.restore();
 
     ctx.fillStyle = 'rgba(255, 255, 255, 0.44)';
     ctx.font = '800 uppercase tracking-widest 9px monospace';
-    ctx.fillText(`${artistName}`, width / 2, textBaseY + 20);
+    ctx.fillText(`${artistName}`, textBaseX, textBaseY + 20);
 
     // Dynamic watermarks
     if (showWatermarks) {
@@ -1163,10 +1329,10 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
         }
 
         // Place text in precise dynamic quadrant
-        const lyricY = aspect === 'vertical' ? height * 0.58 : height * 0.60;
+        const lyricYCoord = lyricY;
         
         ctx.globalAlpha = opacity;
-        ctx.translate(width / 2, lyricY + translateY);
+        ctx.translate(lyricX, lyricYCoord + translateY);
         ctx.scale(scaleEffect, scaleEffect);
 
         const lineHeight = fontSizePx * lyricLineHeight; // Comfortable leading for multi-line subtitles
@@ -2024,10 +2190,11 @@ export default function VideoGenerationModal({ track, playlist, onClose }: Video
                           <label className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Select Creative Style</label>
                           <div className="grid grid-cols-2 gap-3">
                             {[
+                              { id: 'cyber_organic', name: 'Cyber-Organic 4K', icon: '🔥', desc: 'Obsidian, silver & amber' },
                               { id: 'minimalist', name: 'Clean Chrome', icon: '✨', desc: 'Orbit lines & wave grids' },
-                              { id: 'grunge', name: 'Distressed Metal', icon: '⛓️', desc: 'Aggressive red wireframes' },
-                              { id: 'vibrant', name: 'Neon Pulse', icon: '⚡', desc: 'Neon halos & record vinyl rotate' },
-                              { id: 'abstract', name: 'Ethereal Flow', icon: '🌫️', desc: 'Fluid waves & bezier curves' }
+                              { id: 'vibrant', name: 'Neon Pulse', icon: '⚡', desc: 'Halos & record vinyl spin' },
+                              { id: 'abstract', name: 'Ethereal Flow', icon: '🌫️', desc: 'Fluid wave bezier curves' },
+                              { id: 'grunge', name: 'Distressed Metal', icon: '⛓️', desc: 'Red industrial wireframe' }
                             ].map(s => (
                               <button
                                 key={s.id}

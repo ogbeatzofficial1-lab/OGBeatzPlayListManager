@@ -24,8 +24,11 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
   const [pollinationsKeyConnected, setPollinationsKeyConnected] = useState(() => !!localStorage.getItem("POLLINATIONS_USER_KEY"));
 
   const connectPollinations = () => {
-    // Generate simple redirect URI back to the application parent window route
-    const redirectUrl = encodeURIComponent(window.location.href);
+    // Generate simple redirect URI back to the application parent window route or custom callback on render
+    const origin = window.location.origin;
+    const isRender = origin.includes("onrender.com") || origin.includes("ogbeatzplaylistmanager");
+    const targetUrl = isRender ? "https://ogbeatzplaylistmanager.onrender.com/auth/callback" : window.location.href;
+    const redirectUrl = encodeURIComponent(targetUrl);
     const clientId = (import.meta as any).env.VITE_POLLINATIONS_CLIENT_ID || "pk_UkifqMuyjH77QPxB";
     const authUrl = `https://enter.pollinations.ai/authorize?redirect_uri=${redirectUrl}&client_id=${clientId}`;
     

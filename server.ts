@@ -1179,10 +1179,13 @@ Rules:
     // Prefer client-passed origin to avoid proxy/port resolving issues
     const clientOrigin = req.query.origin as string;
     const origin = (clientOrigin && clientOrigin.startsWith("http")) ? clientOrigin : defaultOrigin;
-    const redirectUri = `${origin}/api/youtube/callback`;
+    
+    const isRenderCallback = origin.includes("onrender.com") || origin.includes("ogbeatzplaylistmanager");
+    const callbackPath = isRenderCallback ? "/auth/callback" : "/api/youtube/callback";
+    const redirectUri = `${origin}${callbackPath}`;
 
     if (!oClientId) {
-      const mockAuthorizeUrl = `${origin}/api/youtube/callback?code=mock_google_oauth_code_ogbeatz&state=${encodeURIComponent(origin)}`;
+      const mockAuthorizeUrl = `${origin}${callbackPath}?code=mock_google_oauth_code_ogbeatz&state=${encodeURIComponent(origin)}`;
       res.json({ url: mockAuthorizeUrl });
       return;
     }
@@ -1201,8 +1204,13 @@ Rules:
   });
 
   // 3. OAuth Callback Handler
-  app.get(["/api/youtube/callback", "/api/youtube/callback/"], async (req, res) => {
+  app.get(["/api/youtube/callback", "/api/youtube/callback/", "/auth/callback", "/auth/callback/"], async (req, res, next) => {
     const { code, state } = req.query;
+
+    if (!code) {
+      // It's a client-side callback / hash-based callback (e.g. Pollinations), fall through to the React SPA index.html
+      return next();
+    }
 
     // Recover target origin from state parameter if present, otherwise fallback
     const rawProto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "http";
@@ -1212,7 +1220,9 @@ Rules:
     const defaultOrigin = `${protocol}://${host}`;
 
     const origin = (state && typeof state === "string" && state.startsWith("http")) ? state : defaultOrigin;
-    const redirectUri = `${origin}/api/youtube/callback`;
+    const isRenderCallback = origin.includes("onrender.com") || origin.includes("ogbeatzplaylistmanager") || req.path.includes("/auth/callback");
+    const callbackPath = isRenderCallback ? "/auth/callback" : "/api/youtube/callback";
+    const redirectUri = `${origin}${callbackPath}`;
 
     if (code === "mock_google_oauth_code_ogbeatz" || !process.env.GOOGLE_CLIENT_ID) {
       googleAuthSession = {
@@ -1856,6 +1866,134 @@ Return valid JSON with the single key: 'replyText'.`;
 
     } catch (err) {
       res.status(500).json({ error: "Comment AI proxy error" });
+    }
+  });
+
+  // GHOSTCUT API: Submit Video Watermark Removal task
+  app.post("/api/ghostcut/submit-task", async (req, res) => {
+    const { apiKey, videoUrl, apiProvider, mode, regionCoordinates } = req.body;
+
+    if (!apiKey) {
+      res.status(400).json({ error: "GhostCut API Token is required." });
+      return;
+    }
+
+    if (!videoUrl) {
+      res.status(400).json({ error: "Video URL is required." });
+      return;
+    }
+
+    // Determine target API endpoint base
+    const provider = apiProvider || "rapidapi";
+    let targetUrl = "";
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json"
+    };
+
+    if (provider === "rapidapi") {
+      targetUrl = "https://ghostcut.p.rapidapi.com/api/pub/video/create";
+      headers["X-RapidAPI-Key"] = apiKey;
+      headers["X-RapidAPI-Host"] = "ghostcut.p.rapidapi.com";
+    } else {
+      targetUrl = "https://api-en.jollytoday.com/api/pub/video/create";
+      // Support bearer or raw authorization
+      headers["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
+    }
+
+    try {
+      // Build body structure for GhostCut
+      const requestBody: Record<string, any> = {
+        video_url: videoUrl,
+        mode: mode || "remove_watermark",
+        // Config options
+        watermark_type: 1 // default automatic smart removal
+      };
+
+      // If user selected explicit boundary region, specify in coordinates (GhostCut region format)
+      if (regionCoordinates) {
+        requestBody.regions = [{
+          x: regionCoordinates.x || 0,
+          y: regionCoordinates.y || 0,
+          w: regionCoordinates.w || 20,
+          h: regionCoordinates.h || 10
+        }];
+        requestBody.watermark_type = 2; // custom region
+      }
+
+      console.log(`Submitting task to GhostCut (${provider}) for video:`, videoUrl);
+
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody)
+      });
+
+      const responseData = await response.json();
+      console.log("GhostCut Response Status:", response.status, responseData);
+
+      if (!response.ok) {
+        res.status(response.status).json({
+          error: responseData?.message || responseData?.error || "GhostCut API responded with an error.",
+          details: responseData
+        });
+        return;
+      }
+
+      res.json(responseData);
+    } catch (err: any) {
+      console.error("GhostCut submission proxy error:", err);
+      res.status(500).json({ 
+        error: "Failed to connect to the GhostCut API server. Check your network or API token.",
+        message: err.message 
+      });
+    }
+  });
+
+  // GHOSTCUT API: Pull Task Result / Polling
+  app.post("/api/ghostcut/check-task", async (req, res) => {
+    const { apiKey, taskId, apiProvider } = req.body;
+
+    if (!apiKey || !taskId) {
+      res.status(400).json({ error: "API Key and Task ID are required." });
+      return;
+    }
+
+    const provider = apiProvider || "rapidapi";
+    let targetUrl = "";
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json"
+    };
+
+    if (provider === "rapidapi") {
+      targetUrl = `https://ghostcut.p.rapidapi.com/api/pub/video/get_result?task_id=${taskId}`;
+      headers["X-RapidAPI-Key"] = apiKey;
+      headers["X-RapidAPI-Host"] = "ghostcut.p.rapidapi.com";
+    } else {
+      targetUrl = `https://api-en.jollytoday.com/api/pub/video/get_result?task_id=${taskId}`;
+      headers["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
+    }
+
+    try {
+      console.log(`Checking task status for [${taskId}] on GhostCut (${provider})`);
+
+      const response = await fetch(targetUrl, {
+        method: "GET",
+        headers
+      });
+
+      const responseData = await response.json();
+      if (!response.ok) {
+        res.status(response.status).json({
+          error: responseData?.message || responseData?.error || "Failed to query status.",
+          details: responseData
+        });
+        return;
+      }
+
+      res.json(responseData);
+    } catch (err: any) {
+      console.error("GhostCut check-task proxy error:", err);
+      res.status(500).json({ error: "Failed to poll GhostCut process status.", message: err.message });
     }
   });
 

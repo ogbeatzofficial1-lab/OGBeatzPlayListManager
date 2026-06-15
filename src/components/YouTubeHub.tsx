@@ -296,6 +296,7 @@ export default function YouTubeHub({ addToast }: YouTubeHubProps) {
                     origin !== window.location.origin &&
                     !origin.endsWith(".run.app") &&
                     !origin.endsWith(".onrender.com") &&
+                    !origin.includes("ogbeatzplaylistmanager.onrender.com") &&
                     !origin.includes("localhost")
                 ) {
                     return;

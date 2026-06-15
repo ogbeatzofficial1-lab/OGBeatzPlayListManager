@@ -85,6 +85,7 @@ import ShareModal from "./components/ShareModal";
 import TrackDetailsModal from "./components/TrackDetailsModal";
 import YouTubeHub from "./components/YouTubeHub";
 import ExportMasterModal from "./components/ExportMasterModal";
+import WatermarkRemover from "./components/WatermarkRemover";
 import { Track, ShareLink, Client, Playlist } from "./types";
 import { cn } from "./lib/utils";
 import { getSupabaseClient, supabaseUrl } from "./lib/supabase";
@@ -177,6 +178,7 @@ export default function App() {
   );
   const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [videoSubTab, setVideoSubTab] = useState<"archive" | "remover">("archive");
   const [selectedTrackForVideo, setSelectedTrackForVideo] =
     useState<Track | null>(null);
   const [selectedPlaylistForVideo, setSelectedPlaylistForVideo] =
@@ -1306,130 +1308,162 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black tracking-tight uppercase">
-            Promo Archive
+            {videoSubTab === "archive" ? "Promo Archive" : "AI Watermark Remover"}
           </h1>
           <p className="text-zinc-500 text-sm font-medium">
-            All AI-generated social assets and motion graphics.
+            {videoSubTab === "archive" 
+              ? "All AI-generated social assets and motion graphics." 
+              : "Locate and dissolve platform watermarks and captions on promo masters."}
           </p>
         </div>
+        {videoSubTab === "archive" && (
+          <button
+            onClick={() => setShowUploadVideo(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-black font-black uppercase text-[10px] tracking-widest rounded-full shadow-lg shadow-orange-500/20 active:scale-95 transition-all cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-black" /> Upload Video
+          </button>
+        )}
+      </div>
+
+      {/* Sub-tabs toggler option bar */}
+      <div className="flex gap-2.5 border-b border-zinc-900 pb-2">
         <button
-          onClick={() => setShowUploadVideo(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-black font-black uppercase text-[10px] tracking-widest rounded-full shadow-lg shadow-orange-500/20 active:scale-95 transition-all cursor-pointer"
+          onClick={() => setVideoSubTab("archive")}
+          className={`px-6 py-2.5 text-[9px] font-black uppercase tracking-widest rounded-full transition-all duration-300 ${
+            videoSubTab === "archive"
+              ? "bg-orange-500 text-black shadow-lg shadow-orange-500/15"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50"
+          }`}
         >
-          <Upload className="w-4 h-4 text-black" /> Upload Video
+          Promo Archives
+        </button>
+        <button
+          onClick={() => setVideoSubTab("remover")}
+          className={`px-6 py-2.5 text-[9px] font-black uppercase tracking-widest rounded-full transition-all duration-300 flex items-center gap-2 ${
+            videoSubTab === "remover"
+              ? "bg-orange-500 text-black shadow-lg shadow-orange-500/15"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" /> AI Watermark Remover
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {promoVideos.length > 0 ? (
-          promoVideos.map((video) => {
-            const track = tracks.find((t) => t.id === video.track_id);
-            const playlist = playlists.find((p) => p.id === video.playlist_id);
-            const sourceName = track?.name || playlist?.name || "Unknown Asset";
+      {videoSubTab === "archive" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {promoVideos.length > 0 ? (
+            promoVideos.map((video) => {
+              const track = tracks.find((t) => t.id === video.track_id);
+              const playlist = playlists.find((p) => p.id === video.playlist_id);
+              const sourceName = track?.name || playlist?.name || "Unknown Asset";
 
-            return (
-              <motion.div
-                key={video.id}
-                layoutId={video.id}
-                onClick={() => setSelectedVideoForPreview(video)}
-                className="group relative bg-zinc-950 border border-zinc-900 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-orange-500/50 transition-all shadow-xl"
-              >
-                <div className="aspect-square relative overflow-hidden">
-                  <img
-                    src={video.thumbnail_url}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-70"
-                    alt={sourceName}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+              return (
+                <motion.div
+                  key={video.id}
+                  layoutId={video.id}
+                  onClick={() => setSelectedVideoForPreview(video)}
+                  className="group relative bg-zinc-950 border border-zinc-900 rounded-[2.5rem] overflow-hidden cursor-pointer hover:border-orange-500/50 transition-all shadow-xl"
+                >
+                  <div className="aspect-square relative overflow-hidden">
+                    <img
+                      src={video.thumbnail_url}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-70"
+                      alt={sourceName}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
 
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-12 h-12 bg-white/20 backdrop-blur-xl border border-white/30 rounded-full flex items-center justify-center text-white scale-90 group-hover:scale-100 transition-transform">
-                      <Play className="w-5 h-5 fill-current ml-0.5" />
-                    </div>
-                  </div>
-
-                  <div className="absolute top-4 left-4">
-                    <div className="px-3 py-1 bg-black/50 backdrop-blur-md border border-white/10 rounded-full text-[8px] font-black uppercase tracking-widest text-orange-500">
-                      {video.style}
-                    </div>
-                  </div>
-
-                  {/* Quick Delete Overlay Button & Confirmation Portal */}
-                  {confirmDeleteId === video.id ? (
-                    <div 
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute inset-0 z-30 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center select-none"
-                    >
-                      <AlertCircle className="w-8 h-8 text-rose-500 mb-2 animate-pulse" />
-                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Destroy Video Asset?</p>
-                      <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-1 mx-2">This action is irreversible and purges all records permanently.</p>
-                      <div className="flex items-center gap-2 mt-4 w-full px-2">
-                        <button
-                          onClick={() => {
-                            deletePromoVideo(video.id);
-                            setConfirmDeleteId(null);
-                          }}
-                          className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-black rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-md shadow-rose-600/10"
-                        >
-                          Yes
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-zinc-300 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer"
-                        >
-                          No
-                        </button>
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="w-12 h-12 bg-white/20 backdrop-blur-xl border border-white/30 rounded-full flex items-center justify-center text-white scale-90 group-hover:scale-100 transition-transform">
+                        <Play className="w-5 h-5 fill-current ml-0.5" />
                       </div>
                     </div>
-                  ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmDeleteId(video.id);
-                      }}
-                      className="absolute top-4 right-4 z-20 p-2.5 bg-black/60 backdrop-blur-md border border-white/10 text-zinc-400 hover:text-rose-500 hover:bg-rose-950/40 rounded-full opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-lg active:scale-90"
-                      title="Destroy Promo Video"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
 
-                <div className="p-6">
-                  <h3 className="text-lg font-black italic uppercase tracking-tighter truncate">
-                    {sourceName}
-                  </h3>
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">
-                      {new Date(video.created_at).toLocaleDateString()}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <span className="text-[8px] font-black uppercase tracking-widest text-emerald-500">
-                        READY
+                    <div className="absolute top-4 left-4">
+                      <div className="px-3 py-1 bg-black/50 backdrop-blur-md border border-white/10 rounded-full text-[8px] font-black uppercase tracking-widest text-orange-500">
+                        {video.style}
+                      </div>
+                    </div>
+
+                    {/* Quick Delete Overlay Button & Confirmation Portal */}
+                    {confirmDeleteId === video.id ? (
+                      <div 
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute inset-0 z-30 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center select-none"
+                      >
+                        <AlertCircle className="w-8 h-8 text-rose-500 mb-2 animate-pulse" />
+                        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Destroy Video Asset?</p>
+                        <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-1 mx-2">This action is irreversible and purges all records permanently.</p>
+                        <div className="flex items-center gap-2 mt-4 w-full px-2">
+                          <button
+                            onClick={() => {
+                              deletePromoVideo(video.id);
+                              setConfirmDeleteId(null);
+                            }}
+                            className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-black rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer shadow-md shadow-rose-600/10"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-zinc-300 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer"
+                          >
+                            No
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmDeleteId(video.id);
+                        }}
+                        className="absolute top-4 right-4 z-20 p-2.5 bg-black/60 backdrop-blur-md border border-white/10 text-zinc-400 hover:text-rose-500 hover:bg-rose-950/40 rounded-full opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-lg active:scale-90"
+                        title="Destroy Promo Video"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="p-6">
+                    <h3 className="text-lg font-black italic uppercase tracking-tighter truncate">
+                      {sourceName}
+                    </h3>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">
+                        {new Date(video.created_at).toLocaleDateString()}
                       </span>
+                      <div className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="text-[8px] font-black uppercase tracking-widest text-emerald-500">
+                          READY
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </motion.div>
-            );
-          })
-        ) : (
-          <div className="col-span-full py-32 bg-zinc-950/50 border border-zinc-900 rounded-[3.5rem] flex flex-col items-center justify-center text-center space-y-6">
-            <div className="w-20 h-20 rounded-[2rem] bg-zinc-900 flex items-center justify-center text-zinc-700">
-              <Video className="w-10 h-10" />
+                </motion.div>
+              );
+            })
+          ) : (
+            <div className="col-span-full py-32 bg-zinc-950/50 border border-zinc-900 rounded-[3.5rem] flex flex-col items-center justify-center text-center space-y-6">
+              <div className="w-20 h-20 rounded-[2rem] bg-zinc-900 flex items-center justify-center text-zinc-700">
+                <Video className="w-10 h-10" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-black uppercase tracking-tighter">
+                  Archive is empty
+                </h3>
+                <p className="text-zinc-500 text-xs font-black uppercase tracking-widest">
+                  Generate motion assets from the Tracks or Playlists menu.
+                </p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-black uppercase tracking-tighter">
-                Archive is empty
-              </h3>
-              <p className="text-zinc-500 text-xs font-black uppercase tracking-widest">
-                Generate motion assets from the Tracks or Playlists menu.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      ) : (
+        <WatermarkRemover />
+      )}
     </div>
   );
 
