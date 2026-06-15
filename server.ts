@@ -1871,7 +1871,7 @@ Return valid JSON with the single key: 'replyText'.`;
 
   // GHOSTCUT API: Submit Video Watermark Removal task
   app.post("/api/ghostcut/submit-task", async (req, res) => {
-    const { apiKey, videoUrl, apiProvider, mode, regionCoordinates } = req.body;
+    const { apiKey, videoUrl, apiProvider, mode, regionCoordinates, regions } = req.body;
 
     if (!apiKey) {
       res.status(400).json({ error: "GhostCut API Token is required." });
@@ -1909,8 +1909,16 @@ Return valid JSON with the single key: 'replyText'.`;
         watermark_type: 1 // default automatic smart removal
       };
 
-      // If user selected explicit boundary region, specify in coordinates (GhostCut region format)
-      if (regionCoordinates) {
+      // Support multi-box region bounds
+      if (regions && Array.isArray(regions) && regions.length > 0) {
+        requestBody.regions = regions.map((r: any) => ({
+          x: typeof r.x === 'number' ? r.x : 0,
+          y: typeof r.y === 'number' ? r.y : 0,
+          w: typeof r.w === 'number' ? r.w : 20,
+          h: typeof r.h === 'number' ? r.h : 10
+        }));
+        requestBody.watermark_type = 2; // custom region
+      } else if (regionCoordinates) {
         requestBody.regions = [{
           x: regionCoordinates.x || 0,
           y: regionCoordinates.y || 0,
