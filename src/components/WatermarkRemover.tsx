@@ -534,7 +534,11 @@ export default function WatermarkRemover() {
                   preload="auto"
                   loop
                   muted
-                  onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+                  onLoadedMetadata={(e) => {
+                    const d = e.currentTarget.duration || 0;
+                    setDuration(d);
+                    setCustomEnd(Math.round(d));
+                  }}
                 />
                 <canvas ref={canvasRef} className="w-full h-full object-contain" />
 
@@ -622,33 +626,99 @@ export default function WatermarkRemover() {
 
           {/* Media Playback controller */}
           {selectedVideoUrl && (
-            <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 flex items-center gap-4">
-              <button 
-                onClick={handleTogglePlay} 
-                className="p-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors cursor-pointer"
-              >
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current" />}
-              </button>
-              <div className="text-slate-400 text-xs font-mono">
-                {currentTime.toFixed(1)}s / {duration.toFixed(1)}s
-              </div>
-              <div className="text-slate-200 text-xs truncate flex-grow">
-                {selectedVideoName}
-              </div>
-              {selectedVideoUrl && (
-                <button 
-                  onClick={() => {
-                    setSelectedVideoUrl(null);
-                    setVideoFile(null);
-                    setCleanVideoResultUrl(null);
-                    setIsPlaying(false);
-                    setCurrentTime(0);
+            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
+              
+              {/* Visual Timeline Tracker */}
+              <div className="relative w-full h-3 bg-slate-950 rounded-full overflow-hidden group">
+                
+                {/* 🌟 1. The Custom Selection Highlight Range Layer */}
+                {(() => {
+                  const videoDuration = videoRef.current?.duration || duration || 1;
+                  
+                  // Calculate percentages for the selection box width
+                  const leftPercent = processRange === 'full' ? 0 : (customStart / videoDuration) * 100;
+                  const rightPercent = processRange === 'full' ? 100 : (customEnd / videoDuration) * 100;
+                  const widthPercent = rightPercent - leftPercent;
+
+                  return (
+                    <div 
+                      style={{ 
+                        left: `${Math.max(0, leftPercent)}%`, 
+                        width: `${Math.min(100, widthPercent)}%` 
+                      }}
+                      className="absolute top-0 h-full bg-blue-500/30 border-l border-r border-blue-400 pointer-events-none transition-all"
+                    />
+                  );
+                })()}
+
+                {/* 2. The Active Playhead Line */}
+                {(() => {
+                  const videoDuration = videoRef.current?.duration || duration || 1;
+                  const playheadPercent = (currentTime / videoDuration) * 100;
+
+                  return (
+                    <div 
+                      style={{ left: `${playheadPercent}%` }}
+                      className="absolute top-0 w-1 h-full bg-white z-10 pointer-events-none"
+                    />
+                  );
+                })()}
+
+                {/* 3. Invisible Input Slider for Clicking/Seeking */}
+                <input 
+                  type="range"
+                  min={0}
+                  max={videoRef.current?.duration || duration || 100}
+                  value={currentTime}
+                  onChange={(e) => {
+                    if (videoRef.current) {
+                      videoRef.current.currentTime = Number(e.target.value);
+                      setCurrentTime(Number(e.target.value));
+                    }
                   }}
-                  className="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 cursor-pointer"
+                  className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer z-20"
+                />
+              </div>
+
+              {/* Controls and Metadata Info Footer */}
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={handleTogglePlay} 
+                  className="p-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 transition-colors cursor-pointer"
                 >
-                  Unload
+                  {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
                 </button>
-              )}
+
+                <div className="text-slate-400 text-xs font-mono">
+                  {currentTime.toFixed(1)}s / {(videoRef.current?.duration || duration || 0).toFixed(1)}s
+                </div>
+
+                <div className="text-slate-500 text-xs truncate flex-grow">
+                  {selectedVideoName}
+                </div>
+
+                {/* Time Selection Readout Tag */}
+                <div className="text-xs bg-blue-950 text-blue-400 px-2.5 py-1 rounded-md border border-blue-900/60 font-medium font-mono">
+                  {processRange === 'preview' && '⏱️ Range: First 5s'}
+                  {processRange === 'full' && '⏱️ Range: Entire Video'}
+                  {processRange === 'custom' && `⏱️ Range: ${customStart}s - ${customEnd}s`}
+                </div>
+
+                {selectedVideoUrl && (
+                  <button 
+                    onClick={() => {
+                      setSelectedVideoUrl(null);
+                      setVideoFile(null);
+                      setCleanVideoResultUrl(null);
+                      setIsPlaying(false);
+                      setCurrentTime(0);
+                    }}
+                    className="text-xs text-red-400 hover:text-red-300 transition-colors px-2 py-1 cursor-pointer"
+                  >
+                    Unload
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

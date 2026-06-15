@@ -3,6 +3,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import multer from "multer";
 
 // Helper with automatic fallback for 429 Rate Limit/Quota Errors
 async function generateContentWithFallback(ai: GoogleGenAI, params: { model: string; contents: any; config?: any }) {
@@ -32,6 +33,13 @@ async function generateContentWithFallback(ai: GoogleGenAI, params: { model: str
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 200 * 1024 * 1024, // 200MB limits for videos
+    },
+  });
 
   // Let Express trust proxy headers (X-Forwarded-Proto, X-Forwarded-Host) for Cloud Run, Render, etc.
   app.set("trust proxy", true);
@@ -1870,25 +1878,26 @@ Return valid JSON with the single key: 'replyText'.`;
   });
 
   // GHOSTCUT API: Submit Video Watermark Removal task
-  app.post("/api/ghostcut/submit-task", async (req, res) => {
-    const { apiKey, videoUrl, apiProvider, mode, regionCoordinates, regions } = req.body;
+  app.post("/api/ghostcut/submit-task", upload.any(), async (req, res) => {
+    const { apiKey, videoUrl, apiProvider, mode } = req.body;
+
+    const files = req.files as Express.Multer.File[] | undefined;
+    const uploadedFile = (files && files.length > 0) ? files[0] : null;
 
     if (!apiKey) {
       res.status(400).json({ error: "GhostCut API Token is required." });
       return;
     }
 
-    if (!videoUrl) {
-      res.status(400).json({ error: "Video URL is required." });
+    if (!videoUrl && !uploadedFile) {
+      res.status(400).json({ error: "Video URL or Uploaded File is required." });
       return;
     }
 
     // Determine target API endpoint base
     const provider = apiProvider || "rapidapi";
     let targetUrl = "";
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json"
-    };
+    const headers: Record<string, string> = {};
 
     if (provider === "rapidapi") {
       targetUrl = "https://ghostcut.p.rapidapi.com/api/pub/video/create";
@@ -1901,64 +1910,157 @@ Return valid JSON with the single key: 'replyText'.`;
     }
 
     try {
-      // Build body structure for GhostCut
-      const requestBody: Record<string, any> = {
-        video_url: videoUrl,
-        mode: mode || "remove_watermark",
-        // Config options
-        watermark_type: 1 // default automatic smart removal
-      };
+      let response;
 
-      if (typeof req.body.inpainting !== 'undefined') {
-        requestBody.inpainting = req.body.inpainting;
-      }
+      if (uploadedFile) {
+        // Build multipart/form-data request for GhostCut using native FormData
+        const form = new FormData();
 
-      if (typeof req.body.apply_to_all_frames !== 'undefined') {
-        requestBody.apply_to_all_frames = req.body.apply_to_all_frames;
-      }
+        const fileBlob = new Blob([uploadedFile.buffer], { type: uploadedFile.mimetype });
+        
+        // Append both video_file and file, just in case
+        form.append("video_file", fileBlob, uploadedFile.originalname);
+        form.append("file", fileBlob, uploadedFile.originalname);
 
-      if (typeof req.body.duration !== 'undefined') {
-        requestBody.duration = req.body.duration;
-      }
+        form.append("mode", mode || "remove_watermark");
+        form.append("watermark_type", "2"); // Custom region watermark removal
+        form.append("apply_to_all_frames", "true");
 
-      if (typeof req.body.total_video_duration !== 'undefined') {
-        requestBody.total_video_duration = req.body.total_video_duration;
-      }
+        if (typeof req.body.inpainting !== 'undefined') {
+          form.append("inpainting", String(req.body.inpainting));
+        }
 
-      // Support multi-box region bounds
-      if (regions && Array.isArray(regions) && regions.length > 0) {
-        const mappedBoxes = regions.map((r: any) => ({
-          x: typeof r.x === 'number' ? r.x : 0,
-          y: typeof r.y === 'number' ? r.y : 0,
-          w: typeof r.w === 'number' ? r.w : 20,
-          h: typeof r.h === 'number' ? r.h : 10,
-          start_time: typeof r.start_time === 'number' ? r.start_time : 0,
-          end_time: typeof r.end_time === 'number' ? r.end_time : 0
-        }));
-        requestBody.regions = mappedBoxes;
-        requestBody.rect_array = mappedBoxes; // mirror standard rect_array
-        requestBody.watermark_type = 2; // custom region
-      } else if (regionCoordinates) {
-        const singleBox = {
-          x: regionCoordinates.x || 0,
-          y: regionCoordinates.y || 0,
-          w: regionCoordinates.w || 20,
-          h: regionCoordinates.h || 10,
-          start_time: regionCoordinates.start_time || 0,
-          end_time: regionCoordinates.end_time || 0
+        if (typeof req.body.duration !== 'undefined') {
+          form.append("duration", String(req.body.duration));
+        }
+
+        if (typeof req.body.total_video_duration !== 'undefined') {
+          form.append("total_video_duration", String(req.body.total_video_duration));
+        }
+
+        // Support regions (which may be parsed from string)
+        let resolvedRegions = req.body.regions;
+        if (typeof resolvedRegions === 'string') {
+          try {
+            resolvedRegions = JSON.parse(resolvedRegions);
+          } catch (e) {}
+        }
+
+        let resolvedRegionCoords = req.body.regionCoordinates;
+        if (typeof resolvedRegionCoords === 'string') {
+          try {
+            resolvedRegionCoords = JSON.parse(resolvedRegionCoords);
+          } catch (e) {}
+        }
+
+        if (resolvedRegions && Array.isArray(resolvedRegions) && resolvedRegions.length > 0) {
+          const mappedBoxes = resolvedRegions.map((r: any) => ({
+            x: typeof r.x === 'number' ? r.x : (Number(r.x) || 0),
+            y: typeof r.y === 'number' ? r.y : (Number(r.y) || 0),
+            w: typeof r.w === 'number' ? r.w : (Number(r.w) || 20),
+            h: typeof r.h === 'number' ? r.h : (Number(r.h) || 10),
+            start_time: typeof r.start_time === 'number' ? r.start_time : (Number(r.start_time) || 0),
+            end_time: typeof r.end_time === 'number' ? r.end_time : (Number(r.end_time) || 0)
+          }));
+          form.append("regions", JSON.stringify(mappedBoxes));
+          form.append("rect_array", JSON.stringify(mappedBoxes));
+        } else if (resolvedRegionCoords) {
+          const singleBox = {
+            x: typeof resolvedRegionCoords.x === 'number' ? resolvedRegionCoords.x : (Number(resolvedRegionCoords.x) || 0),
+            y: typeof resolvedRegionCoords.y === 'number' ? resolvedRegionCoords.y : (Number(resolvedRegionCoords.y) || 0),
+            w: typeof resolvedRegionCoords.w === 'number' ? resolvedRegionCoords.w : (Number(resolvedRegionCoords.w) || 20),
+            h: typeof resolvedRegionCoords.h === 'number' ? resolvedRegionCoords.h : (Number(resolvedRegionCoords.h) || 10),
+            start_time: typeof resolvedRegionCoords.start_time === 'number' ? resolvedRegionCoords.start_time : (Number(resolvedRegionCoords.start_time) || 0),
+            end_time: typeof resolvedRegionCoords.end_time === 'number' ? resolvedRegionCoords.end_time : (Number(resolvedRegionCoords.end_time) || 0)
+          };
+          form.append("regions", JSON.stringify([singleBox]));
+          form.append("rect_array", JSON.stringify([singleBox]));
+        }
+
+        console.log(`Submitting multipart file task to GhostCut (${provider}) with file: ${uploadedFile.originalname}`);
+
+        response = await fetch(targetUrl, {
+          method: "POST",
+          headers, // Do NOT set Content-Type so fetch sets boundary correctly
+          body: form
+        });
+      } else {
+        // Build JSON body structure for URL-based GhostCut submissions
+        const requestBody: Record<string, any> = {
+          video_url: videoUrl,
+          mode: mode || "remove_watermark",
+          watermark_type: 1 // default automatic smart removal
         };
-        requestBody.regions = [singleBox];
-        requestBody.rect_array = [singleBox];
-        requestBody.watermark_type = 2; // custom region
+
+        if (typeof req.body.inpainting !== 'undefined') {
+          requestBody.inpainting = req.body.inpainting;
+        }
+
+        if (typeof req.body.apply_to_all_frames !== 'undefined') {
+          requestBody.apply_to_all_frames = req.body.apply_to_all_frames;
+        }
+
+        if (typeof req.body.duration !== 'undefined') {
+          requestBody.duration = req.body.duration;
+        }
+
+        if (typeof req.body.total_video_duration !== 'undefined') {
+          requestBody.total_video_duration = req.body.total_video_duration;
+        }
+
+        let resolvedRegions = req.body.regions;
+        if (typeof resolvedRegions === 'string') {
+          try {
+            resolvedRegions = JSON.parse(resolvedRegions);
+          } catch (e) {}
+        }
+
+        let resolvedRegionCoords = req.body.regionCoordinates;
+        if (typeof resolvedRegionCoords === 'string') {
+          try {
+            resolvedRegionCoords = JSON.parse(resolvedRegionCoords);
+          } catch (e) {}
+        }
+
+        if (resolvedRegions && Array.isArray(resolvedRegions) && resolvedRegions.length > 0) {
+          const mappedBoxes = resolvedRegions.map((r: any) => ({
+            x: typeof r.x === 'number' ? r.x : 0,
+            y: typeof r.y === 'number' ? r.y : 0,
+            w: typeof r.w === 'number' ? r.w : 20,
+            h: typeof r.h === 'number' ? r.h : 10,
+            start_time: typeof r.start_time === 'number' ? r.start_time : 0,
+            end_time: typeof r.end_time === 'number' ? r.end_time : 0
+          }));
+          requestBody.regions = mappedBoxes;
+          requestBody.rect_array = mappedBoxes; // mirror standard rect_array
+          requestBody.watermark_type = 2; // custom region
+        } else if (resolvedRegionCoords) {
+          const singleBox = {
+            x: resolvedRegionCoords.x || 0,
+            y: resolvedRegionCoords.y || 0,
+            w: resolvedRegionCoords.w || 20,
+            h: resolvedRegionCoords.h || 10,
+            start_time: resolvedRegionCoords.start_time || 0,
+            end_time: resolvedRegionCoords.end_time || 0
+          };
+          requestBody.regions = [singleBox];
+          requestBody.rect_array = [singleBox];
+          requestBody.watermark_type = 2; // custom region
+        }
+
+        console.log(`Submitting JSON API task to GhostCut (${provider}) for video:`, videoUrl);
+
+        const jsonHeaders = {
+          ...headers,
+          "Content-Type": "application/json"
+        };
+
+        response = await fetch(targetUrl, {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify(requestBody)
+        });
       }
-
-      console.log(`Submitting task to GhostCut (${provider}) for video:`, videoUrl);
-
-      const response = await fetch(targetUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(requestBody)
-      });
 
       const responseData = await response.json();
       console.log("GhostCut Response Status:", response.status, responseData);

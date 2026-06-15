@@ -34,6 +34,7 @@
     "localforage": "^1.10.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "multer": "^2.1.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "recharts": "^3.8.1",
@@ -46,6 +47,7 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/jszip": "^3.4.0"
+    "@types/jszip": "^3.4.0",
+    "@types/multer": "^2.1.0"
   }
 }
