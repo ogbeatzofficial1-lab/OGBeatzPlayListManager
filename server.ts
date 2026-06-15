@@ -1917,6 +1917,14 @@ Return valid JSON with the single key: 'replyText'.`;
         requestBody.apply_to_all_frames = req.body.apply_to_all_frames;
       }
 
+      if (typeof req.body.duration !== 'undefined') {
+        requestBody.duration = req.body.duration;
+      }
+
+      if (typeof req.body.total_video_duration !== 'undefined') {
+        requestBody.total_video_duration = req.body.total_video_duration;
+      }
+
       // Support multi-box region bounds
       if (regions && Array.isArray(regions) && regions.length > 0) {
         const mappedBoxes = regions.map((r: any) => ({

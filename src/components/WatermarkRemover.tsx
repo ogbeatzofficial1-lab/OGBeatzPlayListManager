@@ -277,7 +277,7 @@ export default function WatermarkRemover() {
       // 1. Get the real natural resolution of the source video
       const videoWidth = videoRef.current?.videoWidth || 1920;
       const videoHeight = videoRef.current?.videoHeight || 1080;
-      const videoDuration = videoRef.current?.duration || 0;
+      const totalVideoDuration = videoRef.current?.duration || 0;
 
       // 2. Map percentage watermark boxes to absolute frame dimensions (pixel counts)
       // for exact matching across rapidapi or direct tokens as required by GhostCut core
@@ -287,7 +287,7 @@ export default function WatermarkRemover() {
         w: Math.round((box.w / 100) * videoWidth),
         h: Math.round((box.h / 100) * videoHeight),
         start_time: 0,
-        end_time: Math.round(videoDuration)
+        end_time: Math.round(totalVideoDuration)
       }));
 
       const payload = {
@@ -297,6 +297,8 @@ export default function WatermarkRemover() {
         mode: ghostcutMode,
         inpainting: useInpainting,
         apply_to_all_frames: true,
+        duration: Math.round(totalVideoDuration),
+        total_video_duration: Math.round(totalVideoDuration),
         regions: ghostcutMode === 'remove_watermark' ? ghostcutBoxes : null
       };
 
@@ -324,14 +326,12 @@ export default function WatermarkRemover() {
       // Web Polling
       let completed = false;
       let attempts = 0;
-      const maxAttempts = 15;
+      const maxAttempts = 100; // Increased attempts capacity (100 * 5s = up to 500s)
 
       while (!completed && attempts < maxAttempts) {
         attempts++;
-        await new Promise(r => setTimeout(r, 3000));
-        setProcessingStep(`GhostCut cloud rendering... (Attempt ${attempts}/${maxAttempts})`);
-        setProcessingProgress(Math.min(95, 45 + (attempts * 4)));
-
+        await new Promise(r => setTimeout(r, 5000)); // Polling interval set to 5 seconds
+        
         const pollRes = await fetch("/api/ghostcut/check-task", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -342,9 +342,13 @@ export default function WatermarkRemover() {
           const pollData = await pollRes.json();
           const pData = pollData.data || pollData;
           const status = pData.status;
-          const cleanUrl = pData.video_url || pData.url || pData.processed_video_url;
+          const cleanUrl = pData.video_url || pData.url || pData.processed_video_url || (pData.result && pData.result.video_url);
 
-          if (status === 'success' || status === 1 || status === 'completed' || cleanUrl) {
+          if (status === 'wip' || status === 'processing' || status === 0) {
+            const currentProgress = typeof pData.progress === 'number' ? pData.progress : (pData.progress || Math.min(95, 45 + (attempts * 2)));
+            setProcessingProgress(currentProgress);
+            setProcessingStep(`AI is Inpainting: ${currentProgress}% completed`);
+          } else if (status === 'success' || status === 1 || status === 'completed' || cleanUrl) {
             completed = true;
             setProcessingProgress(100);
             setProcessingStep("Compiling standalone master artifact...");
@@ -365,7 +369,7 @@ export default function WatermarkRemover() {
               created_at: new Date().toISOString()
             });
 
-            addToast("GhostCut AI successfully completed the task!", "success");
+            addToast("Video completely cleaned!", "success");
             addActivity({
               type: 'social',
               user: 'System',
