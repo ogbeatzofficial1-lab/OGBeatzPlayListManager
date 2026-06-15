@@ -215,13 +215,6 @@ export default function WatermarkRemover() {
     setCleanVideoResultUrl(null);
     setIsPlaying(false);
     setCurrentTime(0);
-
-    // 🌟 Reset range markers for the new video asset
-    setCustomStart(0);
-    setCustomEnd(30); 
-    setProcessRange('full'); 
-    setProcessingProgress(0);
-
     addToast(`Imported ${file.name} for watermark removal.`, "info");
   };
 
@@ -364,7 +357,7 @@ export default function WatermarkRemover() {
   };
 
   // Run GhostCut Video processing pipeline
-    const handleExecuteGhostCut = async () => {
+  const handleExecuteGhostCut = async () => {
     if (!selectedVideoUrl) return;
 
     setIsProcessing(true);
@@ -426,9 +419,7 @@ export default function WatermarkRemover() {
           const filePath = `raw_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
           const bucket = 'promo_videos';
 
-          // 🚀 DIRECT STREAM FIX: Strip options payload to skip the 116ms CORS preflight delay!
-          let { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, videoFile, { cacheControl: '3600', upsert: true });
-
+          let { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, videoFile);
 
           // If bucket doesn't exist, try to create it and retry once
           if (uploadError && (
@@ -458,19 +449,15 @@ export default function WatermarkRemover() {
             }
           } else {
             console.warn("Supabase upload returned error:", uploadError);
-            throw uploadError; // 🌟 Throw error to skip the local proxy 35% crash route entirely!
           }
-        } catch (e: any) {
+        } catch (e) {
           console.error("Direct Supabase upload error:", e);
-          addToast(`Cloud Upload Failed: ${e.message || 'Check your Supabase configuration bucket.'}`, "error");
-          setIsProcessing(false);
-          return; // 🌟 Stop code execution here so it never passes raw 180MB to Render's proxy network!
         }
       }
 
-      // If we made it here, the video is safely hosted in the cloud. We can now safely proceed with a lightweight text request.
-      setProcessingStep("Cloud handshake complete! Dispatching task parameters to GhostCut...");
-      setProcessingProgress(50);
+      if (videoFile && !uploadToSupabaseSuccess) {
+        setProcessingStep("Supabase direct upload skipped/failed. Uploading video file via proxy...");
+        setProcessingProgress(35);
 
         const formData = new FormData();
         formData.append("apiKey", apiKey);
