@@ -5,9 +5,120 @@ import {
 } from 'lucide-react';
 import { useMediaStore } from '../context/MediaStoreContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 type GhostCutMode = 'remove_watermark' | 'remove_subtitles' | 'video_crop';
 type ProviderType = 'rapidapi' | 'direct';
+
+interface MyProcessingChartProps {
+  width?: string | number;
+  height?: string | number;
+  progress?: number;
+}
+
+export function MyProcessingChart({ width = "100%", height = 300, progress = 0 }: MyProcessingChartProps) {
+  const [data, setData] = useState(() => {
+    return Array.from({ length: 15 }, (_, i) => ({
+      frame: `F-${i * 10}`,
+      density: Math.round(30 + Math.sin(i * 0.8) * 20 + Math.random() * 15),
+      processingRate: Math.round(60 + Math.cos(i * 0.5) * 25 + Math.random() * 10),
+      loss: Math.round(15 - Math.sin(i * 0.6) * 5 + Math.random() * 2),
+    }));
+  });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setData(prev => {
+        const next = [...prev];
+        next.shift();
+        const lastIndex = prev.length - 1;
+        const lastFrameNum = parseInt(next[lastIndex - 1]?.frame.split('-')[1] || '0') + 10;
+        next.push({
+          frame: `F-${lastFrameNum}`,
+          density: Math.round(35 + Math.sin(progress * 0.3) * 20 + Math.random() * 20),
+          processingRate: Math.round(55 + Math.cos(progress * 0.2) * 20 + Math.random() * 15),
+          loss: Math.max(1, Math.round((100 - progress) * 0.15 + Math.random() * 3)),
+        });
+        return next;
+      });
+    }, 800);
+
+    return () => clearInterval(interval);
+  }, [progress]);
+
+  return (
+    <ResponsiveContainer width={width} height={height}>
+      <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <defs>
+          <linearGradient id="densityGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+          </linearGradient>
+          <linearGradient id="rateGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="#ef4444" stopOpacity={0.0} />
+          </linearGradient>
+          <linearGradient id="lossGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+        <XAxis 
+          dataKey="frame" 
+          stroke="#475569" 
+          tickLine={false} 
+          axisLine={false}
+          tick={{ fontSize: 9, fill: "#64748b", fontFamily: "monospace" }} 
+        />
+        <YAxis 
+          stroke="#475569" 
+          tickLine={false} 
+          axisLine={false} 
+          tick={{ fontSize: 9, fill: "#64748b", fontFamily: "monospace" }} 
+        />
+        <Tooltip 
+          contentStyle={{ 
+            backgroundColor: "#020617", 
+            borderColor: "#1e293b", 
+            borderRadius: "8px",
+            fontSize: "11px",
+            fontFamily: "monospace"
+          }} 
+          labelStyle={{ color: "#94a3b8", fontWeight: "bold" }}
+        />
+        <Area 
+          type="monotone" 
+          dataKey="density" 
+          stroke="#f59e0b" 
+          strokeWidth={2} 
+          fillOpacity={1} 
+          fill="url(#densityGrad)" 
+          name="Pixel Cleanse Index" 
+          activeDot={{ r: 4 }}
+        />
+        <Area 
+          type="monotone" 
+          dataKey="processingRate" 
+          stroke="#ef4444" 
+          strokeWidth={1.5} 
+          fillOpacity={1} 
+          fill="url(#rateGrad)" 
+          name="GPU Thread Load (FPS)" 
+        />
+        <Area 
+          type="monotone" 
+          dataKey="loss" 
+          stroke="#3b82f6" 
+          strokeWidth={1} 
+          fillOpacity={1} 
+          fill="url(#lossGrad)" 
+          name="Compression Residual" 
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
 
 export default function WatermarkRemover() {
   const { promoVideos, addPromoVideo, addActivity, addToast } = useMediaStore();
@@ -636,20 +747,28 @@ export default function WatermarkRemover() {
 
                 {/* Progress bar and spinner renderer */}
                 {isProcessing && (
-                  <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center z-10">
-                    <RefreshCw className="w-10 h-10 text-blue-500 animate-spin mb-4" />
-                    <p className="text-sm font-bold uppercase tracking-wider text-white">GhostCut AI Cloud Pipeline</p>
-                    <p className="text-xs text-slate-400 mt-2 max-w-sm truncate">{processingStep}</p>
-                    
-                    <div className="w-64 h-1.5 bg-slate-800 rounded-full mt-6 overflow-hidden border border-slate-700">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${processingProgress}%` }}
-                        transition={{ duration: 0.15 }}
-                        className="h-full bg-blue-500"
-                      />
+                  <div className="absolute inset-0 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-10 overflow-y-auto">
+                    <div className="flex items-center gap-3 mb-1.5">
+                      <RefreshCw className="w-5 h-5 text-amber-500 animate-spin" />
+                      <p className="text-sm font-bold uppercase tracking-wider text-white">GhostCut AI Cloud Pipeline</p>
                     </div>
-                    <span className="text-[10px] font-mono mt-2 text-blue-400">{processingProgress}% Rendered</span>
+                    <p className="text-xs text-slate-400 max-w-sm truncate mb-4">{processingStep}</p>
+                    
+                    {/* Force the layout wrapper to have real sizing constraints */}
+                    <div style={{ width: '100%', minHeight: '300px', position: 'relative' }}>
+                      <MyProcessingChart width="100%" height={300} progress={processingProgress} />
+                    </div>
+
+                    <div className="w-full max-w-md bg-slate-900/80 border border-slate-800 p-3 rounded-lg mt-4 flex items-center justify-between">
+                      <div className="flex flex-col text-left">
+                        <span className="text-[10px] text-slate-500 uppercase tracking-widest leading-none">Status</span>
+                        <span className="text-xs font-mono text-slate-300 mt-1 font-bold">Compiling standalone master artifact...</span>
+                      </div>
+                      <div className="flex flex-col text-right">
+                        <span className="text-[10px] text-slate-500 uppercase tracking-widest leading-none">Process Ratio</span>
+                        <span className="text-xs font-mono text-amber-400 mt-1 font-bold">{processingProgress}% Rendered</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
