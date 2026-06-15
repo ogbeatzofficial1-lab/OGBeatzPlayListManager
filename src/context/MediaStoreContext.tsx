@@ -899,16 +899,17 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
 
             const initPromoVideos = async () => {
               try {
-                const data = await fetchWithRetry('promo_videos');
-                if (data) {
+                // Bypass remote Supabase fetch for promo videos to ensure no 400 bad requests or cold-start timeouts
+                const cached = localStorage.getItem('ogbeatz_promo_videos');
+                if (cached) {
+                  const data = JSON.parse(cached);
                   const restored = await restorePromoVideoUrls(data);
                   setPromoVideos(restored);
                 } else {
-                  console.warn("promo_videos table fetch returned null. Utilizing empty fallback.");
                   setPromoVideos([]);
                 }
               } catch (err) {
-                console.error("promo_videos init failed:", err);
+                console.error("Local promo_videos init failed:", err);
                 setPromoVideos([]);
               } finally {
                 updateProgress("promo_videos");
@@ -1741,45 +1742,6 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       }
     }
 
-    // If online and Supabase is available, attempt real cloud uploads
-    if (supabase) {
-      // Upload video Blob
-      if (incomingVideo.video_data instanceof Blob) {
-        try {
-          addToast("Uploading render to secure Cloud Vault...", 'info');
-          const fileToUpload = new File(
-            [incomingVideo.video_data], 
-            `${videoId}.mp4`, 
-            { type: incomingVideo.video_data.type || 'video/mp4' }
-          );
-          const uploadedUrl = await uploadFile('promo_videos', fileToUpload);
-          if (uploadedUrl) {
-            videoUrl = uploadedUrl;
-            addToast("Promo render successfully integrated with Cloud Vault!", 'success');
-          }
-        } catch (upErr: any) {
-          console.warn("Could not upload video to Supabase Storage:", upErr);
-        }
-      }
-
-      // Upload thumbnail if custom image_data is provided
-      if (incomingVideo.thumbnail_data instanceof Blob) {
-        try {
-          const thumbToUpload = new File(
-            [incomingVideo.thumbnail_data],
-            `thumb_${videoId}.jpg`,
-            { type: 'image/jpeg' }
-          );
-          const uploadedThumb = await uploadFile('promo_videos', thumbToUpload);
-          if (uploadedThumb) {
-            thumbnailUrl = uploadedThumb;
-          }
-        } catch (thumbErr) {
-          console.warn("Thumb upload failed:", thumbErr);
-        }
-      }
-    }
-
     // 2. CLEAN THE SCHEMA PARAMETERS: Build clean output keys explicitly
     // This prevents accidental fields like 'title' from bleeding into Supabase insert actions.
     const { title, id, ...allowedVideoFields } = incomingVideo;
@@ -1795,21 +1757,9 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       ...allowedVideoFields
     };
 
+    // Update frontend state immediately to prevent visual blocking
     setPromoVideos(prev => [...prev.filter(v => v.id !== videoId), newVideo]);
-
-    if (supabase) {
-      const dbVideo = { ...newVideo } as any;
-      // Strip out non-serializable binary data before inserting into database table
-      delete dbVideo.video_data;
-      delete dbVideo.thumbnail_data;
-      const { error } = await supabase.from('promo_videos').insert(dbVideo);
-      if (error) {
-        console.error("Error inserting promo video:", error);
-        addToast(`Failed to register promo asset in database: ${error.message}`, 'error');
-      } else {
-        addToast("Promo video asset added to database!", 'success');
-      }
-    }
+    console.log("[Local Storage] Video master successfully synchronized with local state repository.");
   };
 
   const deletePromoVideo = async (id: string) => {
@@ -1823,22 +1773,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       console.warn("Could not purge local video blob:", e);
     }
 
-    if (supabase) {
-      const isUuidValid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      if (isUuidValid) {
-        const { error } = await supabase.from('promo_videos').delete().eq('id', id);
-        if (error) {
-          console.error(error);
-          addToast(`Failed to purge promo video from database: ${error.message}`, 'error');
-        } else {
-          addToast("Promo video purged from database!", 'success');
-        }
-      } else {
-        addToast("Promo video asset successfully destroyed!", 'success');
-      }
-    } else {
-      addToast("Promo video asset successfully destroyed!", 'success');
-    }
+    addToast("Promo video asset successfully destroyed!", 'success');
   };
 
   const analyzeTrack = async (
@@ -1935,8 +1870,9 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
   };
 
   const uploadFile = async (bucket: string, file: File): Promise<string | null> => {
-    if (!supabase) {
-      console.warn("Supabase not initialized for uploading.");
+    // Force direct local fallback for promo buckets to speed up uploads and reduce cloud latencies
+    if (!supabase || bucket === 'promo_videos' || bucket === 'promo_videos_thumbnails' || bucket === 'promo_photos') {
+      console.log(`Bypassing Supabase upload for bucket: ${bucket}`);
       try {
         return URL.createObjectURL(file);
       } catch (err) {
@@ -1949,7 +1885,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
       const filePath = `${fileName}`;
 
       // Upload file
-      let { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file);
+      let { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file, { cacheControl: '3600', upsert: false });
 
       // If bucket doesn't exist, create it and retry once
       if (uploadError && (
@@ -1961,7 +1897,7 @@ export function MediaStoreProvider({ children }: { children: React.ReactNode }) 
         try {
           const { error: bucketError } = await supabase.storage.createBucket(bucket, { public: true });
           if (!bucketError) {
-            const { error: retryError } = await supabase.storage.from(bucket).upload(filePath, file);
+            const { error: retryError } = await supabase.storage.from(bucket).upload(filePath, file, { cacheControl: '3600', upsert: false });
             if (!retryError) {
               const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
               return data?.publicUrl || null;

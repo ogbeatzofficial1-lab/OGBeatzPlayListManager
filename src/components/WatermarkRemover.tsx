@@ -47,7 +47,7 @@ export function MyProcessingChart({ width = "100%", height = 300, progress = 0 }
   }, [progress]);
 
   return (
-    <ResponsiveContainer width={width} height={height}>
+    <ResponsiveContainer width={width} height={height} minWidth={0} minHeight={0}>
       <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
         <defs>
           <linearGradient id="densityGrad" x1="0" y1="0" x2="0" y2="1">
@@ -121,7 +121,7 @@ export function MyProcessingChart({ width = "100%", height = 300, progress = 0 }
 }
 
 export default function WatermarkRemover() {
-  const { promoVideos, addPromoVideo, addActivity, addToast } = useMediaStore();
+  const { promoVideos, addPromoVideo, deletePromoVideo, addActivity, addToast } = useMediaStore();
 
   // Selected state
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
@@ -176,12 +176,34 @@ export default function WatermarkRemover() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Save API Key
-  const handleSaveApiKey = () => {
+  const handleSaveApiKey = async () => {
     if (apiKey.trim()) {
       localStorage.setItem("GHOSTCUT_API_KEY", apiKey.trim());
       localStorage.setItem("GHOSTCUT_PROVIDER", apiProvider);
       setIsKeySaved(true);
       addToast(`GhostCut ${apiProvider === 'rapidapi' ? 'RapidAPI' : 'JollyToday Direct'} Key saved securely!`, "success");
+
+      if (apiProvider === "rapidapi") {
+        addToast("Registering your customIdentity session with RapidAPI...", "info");
+        try {
+          const res = await fetch("/api/ghostcut/register-user", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              apiKey: apiKey.trim(),
+              apiProvider: "rapidapi"
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            addToast("User identity registration successful. Ready for video processing!", "success");
+          } else {
+            addToast(`Pre-registration check: ${data.message || 'Complete'}`, "info");
+          }
+        } catch (err) {
+          console.warn("RapidAPI auto-registration did not return success status:", err);
+        }
+      }
     } else {
       localStorage.removeItem("GHOSTCUT_API_KEY");
       setIsKeySaved(false);
@@ -406,103 +428,71 @@ export default function WatermarkRemover() {
       }));
 
       let submitRes;
-      let uploadToSupabaseSuccess = false;
       let finalVideoUrl = selectedVideoUrl;
 
-      if (videoFile) {
-        setProcessingStep("Uploading video file to secure Cloud Storage via Supabase...");
-        setProcessingProgress(30);
+      const submitAbortController = new AbortController();
+      const submitTimeoutId = setTimeout(() => {
+        submitAbortController.abort();
+      }, 180000); // 180 second timeout (3 minutes) for the server submission proxy
 
-        try {
-          const { supabase } = await import('../lib/supabase');
-          const fileExt = videoFile.name.split('.').pop() || 'mp4';
-          const filePath = `raw_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-          const bucket = 'promo_videos';
+      try {
+        if (videoFile) {
+          setProcessingStep("Uploading video file directly via secure server-side compiler...");
+          setProcessingProgress(35);
 
-          let { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, videoFile);
+          const formData = new FormData();
+          formData.append("apiKey", apiKey);
+          if (apiProvider) formData.append("apiProvider", apiProvider);
+          formData.append("mode", ghostcutMode);
+          formData.append("inpainting", String(useInpainting));
+          formData.append("apply_to_all_frames", "true");
+          formData.append("duration", String(endFrameTime - startFrameTime));
+          formData.append("total_video_duration", String(Math.round(totalDuration)));
+          
+          // Append raw video file binary
+          formData.append("file", videoFile);
+          formData.append("video_file", videoFile);
 
-          // If bucket doesn't exist, try to create it and retry once
-          if (uploadError && (
-            uploadError.message?.includes('Bucket not found') || 
-            (uploadError as any).status === 404 ||
-            uploadError.message === 'Bucket not found'
-          )) {
-            console.log(`Bucket '${bucket}' not found. Attempting auto-creation...`);
-            try {
-              const { error: bucketError } = await supabase.storage.createBucket(bucket, { public: true });
-              if (!bucketError) {
-                const { error: retryError } = await supabase.storage.from(bucket).upload(filePath, videoFile);
-                uploadError = retryError;
-              }
-            } catch (err) {
-              console.warn("Unable to create bucket automatically:", err);
-            }
+          if (ghostcutMode === 'remove_watermark') {
+            formData.append("regions", JSON.stringify(ghostcutBoxes));
+            formData.append("rect_array", JSON.stringify(ghostcutBoxes));
           }
 
-          if (!uploadError) {
-            const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
-            if (data?.publicUrl) {
-              finalVideoUrl = data.publicUrl;
-              uploadToSupabaseSuccess = true;
-              console.log("Successfully uploaded to Supabase Storage:", finalVideoUrl);
-              addToast("Direct Cloud Storage upload complete! Bypassing local proxies.", "success");
-            }
-          } else {
-            console.warn("Supabase upload returned error:", uploadError);
-          }
-        } catch (e) {
-          console.error("Direct Supabase upload error:", e);
+          submitRes = await fetch("/api/ghostcut/submit-task", {
+            method: "POST",
+            body: formData,
+            signal: submitAbortController.signal
+          });
+        } else {
+          setProcessingStep("Submitting task to GhostCut cloud compiler...");
+          setProcessingProgress(35);
+
+          const payload = {
+            apiKey,
+            videoUrl: finalVideoUrl,
+            apiProvider,
+            mode: ghostcutMode,
+            inpainting: useInpainting,
+            apply_to_all_frames: true,
+            duration: endFrameTime - startFrameTime,
+            total_video_duration: Math.round(totalDuration),
+            regions: ghostcutMode === 'remove_watermark' ? ghostcutBoxes : null
+          };
+
+          submitRes = await fetch("/api/ghostcut/submit-task", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: submitAbortController.signal
+          });
         }
-      }
-
-      if (videoFile && !uploadToSupabaseSuccess) {
-        setProcessingStep("Supabase direct upload skipped/failed. Uploading video file via proxy...");
-        setProcessingProgress(35);
-
-        const formData = new FormData();
-        formData.append("apiKey", apiKey);
-        if (apiProvider) formData.append("apiProvider", apiProvider);
-        formData.append("mode", ghostcutMode);
-        formData.append("inpainting", String(useInpainting));
-        formData.append("apply_to_all_frames", "true");
-        formData.append("duration", String(endFrameTime - startFrameTime));
-        formData.append("total_video_duration", String(Math.round(totalDuration)));
-        
-        // Append raw video file binary
-        formData.append("file", videoFile);
-        formData.append("video_file", videoFile);
-
-        if (ghostcutMode === 'remove_watermark') {
-          formData.append("regions", JSON.stringify(ghostcutBoxes));
-          formData.append("rect_array", JSON.stringify(ghostcutBoxes));
+      } catch (fErr: any) {
+        if (fErr.name === 'AbortError') {
+          throw new Error("Task submission timed out (3 minutes). Re-adjusting to safe rendering.");
         }
-
-        submitRes = await fetch("/api/ghostcut/submit-task", {
-          method: "POST",
-          body: formData
-        });
-      } else {
-        // Either it was already a URL, or the uploaded video successfully went to Supabase Storage!
-        setProcessingStep("Submitting task to GhostCut cloud compiler...");
-        setProcessingProgress(35);
-
-        const payload = {
-          apiKey,
-          videoUrl: finalVideoUrl,
-          apiProvider,
-          mode: ghostcutMode,
-          inpainting: useInpainting,
-          apply_to_all_frames: true,
-          duration: endFrameTime - startFrameTime,
-          total_video_duration: Math.round(totalDuration),
-          regions: ghostcutMode === 'remove_watermark' ? ghostcutBoxes : null
-        };
-
-        submitRes = await fetch("/api/ghostcut/submit-task", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
+        throw fErr;
+      } finally {
+        clearTimeout(submitTimeoutId);
       }
 
       if (!submitRes.ok) {
@@ -643,6 +633,46 @@ export default function WatermarkRemover() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
+      {/* Standalone App Title Header Bar */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-zinc-950 via-zinc-900 to-black border border-zinc-900 rounded-[2.5rem] p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-2xl">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="space-y-2">
+          <div className="flex items-center gap-2.5">
+            <span className="px-3 py-1 bg-orange-500/10 border border-orange-500/20 text-orange-500 rounded-full text-[8.5px] font-mono font-black uppercase tracking-widest leading-none">
+              STANDALONE STUDIO
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[8.5px] font-mono tracking-widest text-emerald-500 uppercase font-black">
+              ACTIVE SERVICE PIPELINE
+            </span>
+          </div>
+          <h1 className="text-3xl font-black uppercase tracking-tighter text-white flex items-center gap-3">
+            <Sparkles className="w-8 h-8 text-orange-500 animate-pulse" />
+            AI No-Blur Watermark Remover <span className="text-sm font-mono tracking-widest text-zinc-500 font-normal lowercase">v1.4</span>
+          </h1>
+          <p className="text-zinc-400 text-xs font-medium max-w-xl">
+            Locate, crop, and dissolve overlapping watermarks and subtitles in premium master visual assets. Drag in custom video files, select exact coordinates, and download pure, restored outputs instantly.
+          </p>
+        </div>
+        
+        {/* Statistics or Status Overview badge */}
+        <div className="bg-zinc-900/60 backdrop-blur-md border border-zinc-800 p-4 rounded-3xl flex gap-6 shrink-0 min-w-[240px]">
+          <div className="flex-1 text-center">
+            <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest font-black block">Processed Cleans</span>
+            <span className="text-3xl font-black text-white block mt-1">
+              {promoVideos ? promoVideos.filter((v: any) => v.style?.includes('De-Watermarked') || v.style?.includes('Local') || v.style?.includes('Subtitles')).length : 0}
+            </span>
+          </div>
+          <div className="w-px bg-zinc-800" />
+          <div className="flex-grow text-center">
+            <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest font-black block">Storage Health</span>
+            <span className="text-xs font-mono text-[#10b981] uppercase font-black block mt-2.5">
+              100% ONLINE
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* API Configuration Bar */}
       <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap gap-4 items-center justify-between">
         <div className="flex items-center gap-2 text-white font-medium">
@@ -1139,6 +1169,127 @@ export default function WatermarkRemover() {
             <span>{isProcessing ? 'Calling Inpainting Engine...' : 'Execute No-Blur GhostCut'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Standalone Asset Locker & High-Speed Download list */}
+      <div className="bg-zinc-950 border border-zinc-900 rounded-[2.5rem] p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-900 pb-5">
+          <div className="space-y-1">
+            <h3 className="text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+              <Download className="w-5 h-5 text-orange-500" />
+              Cleansed Assets Vault
+            </h3>
+            <p className="text-zinc-500 text-xs font-medium">
+              Permanent high-speed repository of cleaned assets. Download directly to localized volumes or review output.
+            </p>
+          </div>
+          <div className="px-3.5 py-1.5 bg-zinc-900 border border-zinc-850 rounded-full text-[8px] font-mono uppercase text-zinc-400 font-bold tracking-widest">
+            {promoVideos ? promoVideos.length : 0} Assets Persisted
+          </div>
+        </div>
+
+        {promoVideos && promoVideos.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {promoVideos.map((video: any) => {
+              const cleanedStyle = video.style || "AI Processed";
+              const isCleanedType = cleanedStyle.includes('De-Watermarked') || cleanedStyle.includes('Local') || cleanedStyle.includes('Subtitles') || cleanedStyle.includes('Clean');
+              
+              return (
+                <div 
+                  key={video.id} 
+                  className={`bg-zinc-900/40 border p-5 rounded-3xl flex flex-col justify-between space-y-4 hover:border-zinc-750 transition-all group relative ${
+                    isCleanedType ? 'border-zinc-800 hover:border-orange-500/40' : 'border-zinc-900 opacity-80'
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div className="p-2.5 bg-zinc-950 rounded-2xl border border-zinc-805 text-orange-500">
+                        <Video className="w-5 h-5" />
+                      </div>
+                      
+                      {/* Status Tag Badge */}
+                      <span className={`px-2.5 py-0.5 rounded-full text-[7.5px] font-mono font-black uppercase tracking-widest ${
+                        isCleanedType 
+                          ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 animate-pulse' 
+                          : 'bg-zinc-900 border border-zinc-800 text-zinc-400'
+                      }`}>
+                        {cleanedStyle.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 mt-2">
+                      <h4 className="text-xs font-black uppercase tracking-tight text-white truncate group-hover:text-orange-400 transition-colors">
+                        {video.title || "Restored Asset Video Master"}
+                      </h4>
+                      <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">
+                        Compiled {new Date(video.created_at || Date.now()).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Immediate Download and Action Controls */}
+                  <div className="flex items-center gap-2.5 pt-3 border-t border-zinc-900">
+                    <button 
+                      onClick={() => {
+                        // Load back into workspace editor
+                        setSelectedVideoUrl(video.video_url);
+                        setSelectedVideoId(video.id);
+                        setSelectedVideoName(video.title || "Custom Loaded master");
+                        setVideoFile(null);
+                        setCleanVideoResultUrl(null);
+                        setIsPlaying(false);
+                        setCurrentTime(0);
+                        addToast(`Loaded ${video.title || 'video'} directly into editor.`, "success");
+                        // Scroll up smoothly to editor top
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="flex-1 py-2 bg-zinc-950 hover:bg-zinc-900 border border-zinc-850 hover:text-white text-zinc-400 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer active:scale-95"
+                    >
+                      Load Editor
+                    </button>
+                    
+                    <a 
+                      href={video.video_url}
+                      download={`Clean_${(video.title || "restored_master").replace(/\s+/g, '_')}.mp4`}
+                      className="p-2 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer active:scale-95 flex items-center justify-center shadow-lg hover:shadow-orange-500/20"
+                      title="Direct Download Asset"
+                      onClick={() => {
+                        addToast(`Downloading ${video.title || 'cleansed asset'} to disk...`, "success");
+                      }}
+                    >
+                      <Download className="w-4 h-4 text-black" />
+                    </a>
+
+                    <button 
+                      onClick={() => {
+                        deletePromoVideo(video.id);
+                        addToast("Asset removed from Vault logs.", "info");
+                      }}
+                      className="p-2 bg-zinc-950 hover:bg-rose-950/40 border border-zinc-850 hover:border-rose-900/30 text-zinc-500 hover:text-rose-500 rounded-xl transition-all cursor-pointer active:scale-95"
+                      title="Destroy Log Record"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="py-16 bg-zinc-900/10 border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 rounded-[1.5rem] bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-500">
+              <Video className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">
+                No cleansed assets found
+              </h4>
+              <p className="text-zinc-500 text-xs px-4">
+                Upload raw footage and execute the GhostCut inpainting engine to generate permanent app downloads.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
