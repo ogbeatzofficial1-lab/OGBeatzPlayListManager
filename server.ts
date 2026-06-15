@@ -1909,22 +1909,30 @@ Return valid JSON with the single key: 'replyText'.`;
         watermark_type: 1 // default automatic smart removal
       };
 
+      if (typeof req.body.inpainting !== 'undefined') {
+        requestBody.inpainting = req.body.inpainting;
+      }
+
       // Support multi-box region bounds
       if (regions && Array.isArray(regions) && regions.length > 0) {
-        requestBody.regions = regions.map((r: any) => ({
+        const mappedBoxes = regions.map((r: any) => ({
           x: typeof r.x === 'number' ? r.x : 0,
           y: typeof r.y === 'number' ? r.y : 0,
           w: typeof r.w === 'number' ? r.w : 20,
           h: typeof r.h === 'number' ? r.h : 10
         }));
+        requestBody.regions = mappedBoxes;
+        requestBody.rect_array = mappedBoxes; // mirror standard rect_array
         requestBody.watermark_type = 2; // custom region
       } else if (regionCoordinates) {
-        requestBody.regions = [{
+        const singleBox = {
           x: regionCoordinates.x || 0,
           y: regionCoordinates.y || 0,
           w: regionCoordinates.w || 20,
           h: regionCoordinates.h || 10
-        }];
+        };
+        requestBody.regions = [singleBox];
+        requestBody.rect_array = [singleBox];
         requestBody.watermark_type = 2; // custom region
       }
 
