@@ -511,10 +511,10 @@ Based on this, generate:
     if (hasTag(["lofi", "lo-fi", "chill", "relax", "study", "ambient", "smooth"])) {
       return {
         youtube: {
-          title: `â˜• "${name}" - ${artist} [Official Audio] (Chill Lofi / Bedroom Soul)`,
+          title: `☕ "${name}" - ${artist} [Official Audio] (Chill Lofi / Bedroom Soul)`,
           description: `Stream/Download "${name}" by ${artist}: [Streaming Link]\n\nGrab a warm coffee and relax. A heartfelt, nostalgic song escape titled "${name}".\n\nProduced with organic texture layers, vinyl dust saturation, primary vocals, and warm chord movements, perfect for late-night driving, studying, or bedroom relaxation.\n\nTEMPO: ${bpm} BPM\nKEY: ${key}\n\nOut now on Spotify, Apple Music, and all platforms. For playlist placement inquiries, reach out via the artist portal.`
         },
-        instagram: `â˜• Sat down and let the dust settle. "${name}" is officially out everywhere today. Warm vintage Keys, crackling vinyl breaks, and analog tape warmth backing an intimate performance.\n\ntempo: ${bpm} bpm | key: ${key}\n\nStream "${name}" now via the link in my profile! Let me know your favorite part.`,
+        instagram: `☕ Sat down and let the dust settle. "${name}" is officially out everywhere today. Warm vintage Keys, crackling vinyl breaks, and analog tape warmth backing an intimate performance.\n\ntempo: ${bpm} bpm | key: ${key}\n\nStream "${name}" now via the link in my profile! Let me know your favorite part.`,
         generic: `Hi there, hope you're doing great! Just wanted to share my new cozy, nostalgic single release titled "${name}". It has a very heartfelt, relaxed vibe with warm vintage keys and mellow vocals. I think it would be a perfect fit for your lofi / bedroom playlists. Let me know if you would like me to send over structural files or schedule an interview! Cheers.`,
         analysis: {
           instrument_status: "Vocal Release / Song",
@@ -533,10 +533,10 @@ Based on this, generate:
     if (hasTag(["drill", "grime", "uk", "industrial", "gritty", "aggressive"])) {
       return {
         youtube: {
-          title: `ðŸ’€ ${artist} - "${name}" [Official Visualizer] (UK/NY Drill Active Release)`,
+          title: `💀 ${artist} - "${name}" [Official Visualizer] (UK/NY Drill Active Release)`,
           description: `Step into pure industrial grit. Presenting the relentless single "${name}" by ${artist}.\n\nFeaturing raw vocal velocities, dark orchestral string patterns, rapid triplet hi-hat runs, and heavy sliding 808 register flows. Built for peak sound system impact.\n\nTEMPO: ${bpm} BPM\nKEY: ${key}\n\nStream Link: [Streaming Link]\nDM for Bookings: [Booking Email]\nCopyright owned by the artist.`
         },
-        instagram: `ðŸ’€ RAW VOLTAGE: "${name}" is finally active on all platforms. Sliding sub-bass glides, rapid hi-hat rolling patterns, and dark string suspense backing a heavyweight flows.\n\ntempo: ${bpm} bpm | key: ${key}\n\nStream it, play it loud, add it to your rotation. Official visualizer out now, link in bio!`,
+        instagram: `💀 RAW VOLTAGE: "${name}" is finally active on all platforms. Sliding sub-bass glides, rapid hi-hat rolling patterns, and dark string suspense backing a heavyweight flows.\n\ntempo: ${bpm} bpm | key: ${key}\n\nStream it, play it loud, add it to your rotation. Official visualizer out now, link in bio!`,
         generic: `Yo! Just released a heavy new Drill record titled "${name}" and wanted to put it on your radar for playlist considerations or blog roundups. It's got sliding sub glides and very aggressive momentum that gets immediate reaction. Appreciate you tuning in!`,
         analysis: {
           instrument_status: "Vocal Release / Song",
@@ -555,10 +555,10 @@ Based on this, generate:
     if (hasTag(["acoustic", "melodic", "guitar", "organic", "folk", "guitarra"])) {
       return {
         youtube: {
-          title: `ðŸŽ¸ "${name}" - ${artist} (Official Acoustic Session / Song)`,
+          title: `🎸 "${name}" - ${artist} (Official Acoustic Session / Song)`,
           description: `A deeply organic, emotional canvas for storytelling. Presenting an intimate acoustic-led single titled "${name}" by ${artist}.\n\nFeatures warm acoustic fingerpicking, authentic vocal lines, and melancholic ambient strings to provide deep emotional space for lyrics.\n\nTEMPO: ${bpm} BPM\nKEY: ${key}\n\nStream on Spotify & Apple Music: [Streaming Link]\nSubscribe to stay updated with monthly acoustic sessions.`
         },
-        instagram: `ðŸŽ¸ Intimate guitar chords and raw storytelling. This is "${name}", featuring handcrafted guitar melodies, warm organic percussion, and highly personal lyric sheets.\n\ntempo: ${bpm} bpm | key: ${key}\n\nStream "${name}" now via the link in my profile! It would mean the world if you shared it.`,
+        instagram: `🎸 Intimate guitar chords and raw storytelling. This is "${name}", featuring handcrafted guitar melodies, warm organic percussion, and highly personal lyric sheets.\n\ntempo: ${bpm} bpm | key: ${key}\n\nStream "${name}" now via the link in my profile! It would mean the world if you shared it.`,
         generic: `Hi! I wanted to pitch my beautiful, guitar-driven single titled "${name}". It has live acoustic vibes blended with deep modern bass, creating a highly emotional atmosphere for songwriting and relatable vocals. I would love to hear your thoughts for playlist support or blog coverage. Cheers!`,
         analysis: {
           instrument_status: "Vocal Release / Song",
@@ -577,10 +577,10 @@ Based on this, generate:
     // Default Trap variant
     return {
       youtube: {
-        title: `ðŸ”¥ ${artist} - "${name}" [Official Music Video / Audio]`,
+        title: `🔥 ${artist} - "${name}" [Official Music Video / Audio]`,
         description: `The official release of "${name}" by ${artist}. Out now on all digital streaming networks.\n\nEquipped with heavyweight sub-bass registers, crisp double-time hats, atmospheric synthesizer textures, and hard-hitting vocal layouts.\n\nTEMPO: ${bpm} BPM\nKEY: ${key}\n\nStream Link: [Streaming Link]\nFor features and booking contact: [Booking Email]`
       },
-      instagram: `ðŸ”¥ THE SINGLE OUT NOW: "${name}" is officially live everywhere. Heavyweight sub-bass, rapid-fire hi-hat velocities, dark atmospheric layers, and uncut vocal performance.\n\ntempo: ${bpm} bpm | key: ${key}\n\nStream it, play it loud, add it to your playlists! Link in my profile! ðŸ”—`,
+      instagram: `🔥 THE SINGLE OUT NOW: "${name}" is officially live everywhere. Heavyweight sub-bass, rapid-fire hi-hat velocities, dark atmospheric layers, and uncut vocal performance.\n\ntempo: ${bpm} bpm | key: ${key}\n\nStream it, play it loud, add it to your playlists! Link in my profile! 🔗`,
       generic: `Hey! I just dropped a massive new trap-influenced single titled "${name}". This one has heavy sliding 808 sub bass, energetic dark synth leads, and powerful lyrical delivery. It would fit perfectly on your playlist for new high-energy hip-hop releases. Let me know what you think! Thanks.`,
       analysis: {
         instrument_status: "Vocal Release / Song",
@@ -1699,7 +1699,7 @@ Rules:
       {
         id: "yt_active_1",
         youtubeId: "dQw4w9WgXcQ",
-        title: "Keep Em' Thirsty (Gritty Drill Mix) â€¢ Official Audio Visualizer [PRODUCED BY OGBEATZ]",
+        title: "Keep Em' Thirsty (Gritty Drill Mix) • Official Audio Visualizer [PRODUCED BY OGBEATZ]",
         style: "Cyber-Chrome Visualizer",
         views: 48200,
         likes: 2410,
@@ -2129,7 +2129,8 @@ Return valid JSON with the single key: 'replyText'.`;
       const requestBody: Record<string, any> = {
         video_url: resolvedVideoUrl,
         mode: mode || "remove_watermark",
-        watermark_type: 1 // default automatic smart removal
+        watermark_type: 2, // FORCE custom regions
+        inpainting: 1, // FORCE AI inpaint
       };
 
       if (provider === "rapidapi") {
@@ -2172,6 +2173,8 @@ Return valid JSON with the single key: 'replyText'.`;
           y: typeof r.y === 'number' ? r.y : (Number(r.y) || 0),
           w: typeof r.w === 'number' ? r.w : (Number(r.w) || 20),
           h: typeof r.h === 'number' ? r.h : (Number(r.h) || 10),
+          width: typeof r.w === 'number' ? r.w : (Number(r.w) || 20),
+          height: typeof r.h === 'number' ? r.h : (Number(r.h) || 10),
           start_time: typeof r.start_time === 'number' ? r.start_time : (Number(r.start_time) || 0),
           end_time: typeof r.end_time === 'number' ? r.end_time : (Number(r.end_time) || 0)
         }));
@@ -2361,7 +2364,7 @@ Return valid JSON with the single key: 'replyText'.`;
         return;
       }
 
-      // ðŸŒŸ THE LIFESAVER: Trigger the GhostCut engine in the background
+      // 🌟 THE LIFESAVER: Trigger the GhostCut engine in the background
       // Do NOT include an 'await' keyword here. Let it run on its own thread!
       triggerGhostCutEngineAsyncTask({
         url: video_url,
