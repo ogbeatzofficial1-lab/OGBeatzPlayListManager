@@ -1040,7 +1040,8 @@ CRITICAL WORKING INSTRUCTIONS FOR FLAWLESS TRANSCRIPTION & ALIGNMENT:
       const pKey = pollinationsUserKey || process.env.POLLINATIONS_API_KEY || "";
       
       const formData = new globalThis.FormData();
-      const blob = new globalThis.Blob([resolvedBuffer], { type: resolvedMimeType });
+      // Use Uint8Array view of the Buffer to ensure compatibility with BlobPart across environments
+      const blob = new globalThis.Blob([new Uint8Array(resolvedBuffer)], { type: resolvedMimeType });
       formData.append("file", blob, `audio.${resolvedMimeType.split("/")[1] || "mp3"}`);
       formData.append("model", "whisper");
 
