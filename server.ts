@@ -2172,6 +2172,8 @@ Return valid JSON with the single key: 'replyText'.`;
           y: typeof r.y === 'number' ? r.y : (Number(r.y) || 0),
           w: typeof r.w === 'number' ? r.w : (Number(r.w) || 20),
           h: typeof r.h === 'number' ? r.h : (Number(r.h) || 10),
+          width: typeof r.w === 'number' ? r.w : (Number(r.w) || 20),   // ADD THIS
+          height: typeof r.h === 'number' ? r.h : (Number(r.h) || 10), // ADD THIS
           start_time: typeof r.start_time === 'number' ? r.start_time : (Number(r.start_time) || 0),
           end_time: typeof r.end_time === 'number' ? r.end_time : (Number(r.end_time) || 0)
         }));
