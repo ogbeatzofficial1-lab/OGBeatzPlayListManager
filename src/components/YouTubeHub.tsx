@@ -1141,7 +1141,7 @@ GOOGLE_CLIENT_SECRET=your_gcp_oauth_client_secret_here`}
                             </div>
 
                             <div className="h-80 w-full font-mono text-[9px] text-zinc-500">
-                                <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                     <AreaChart data={viewsAnalyticsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="viewsGrad" x1="0" y1="0" x2="0" y2="1">
