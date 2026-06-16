@@ -2397,14 +2397,20 @@ Return valid JSON with the single key: 'replyText'.`;
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-   app.get('/*splat', (req, res) => {
-      if (req.path.startsWith('/api/')) return next();
+    
+    //  FIXED FOR EXPRESS 5: Using a RegExp pattern instead of "*" string wildcard
+    app.get(/(.*)/, (req, res, next) => {
+      if (req.path.startsWith("/api/")) {
+        return next();
+      }
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
+    console.log(`[GhostCut Proxy] RAPIDAPI_KEY: ${process.env.GHOSTCUT_API_KEY || process.env.WATERMARK_ERASER_API_KEY ? "SET" : "NOT SET"}`);
+    console.log(`[GhostCut Proxy] Ready for RapidAPI requests`);
   });
 }
 
