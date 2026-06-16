@@ -1998,15 +1998,17 @@ Return valid JSON with the single key: 'replyText'.`;
 
   // Serve temp video files uploaded directly to server
   app.get("/api/temp-video/:filename", (req, res) => {
-    const safeFilename = path.basename(req.params.filename);
-    const filePath = path.join(os.tmpdir(), safeFilename);
-    if (fs.existsSync(filePath)) {
-      res.setHeader("Content-Type", "video/mp4");
-      res.sendFile(filePath);
-    } else {
-      res.status(404).send("File not found");
-    }
-  });
+  const safeFilename = path.basename(req.params.filename);
+  const filePath = path.join(os.tmpdir(), safeFilename);
+  if (fs.existsSync(filePath)) {
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.sendFile(filePath);
+  } else {
+    console.warn(`[Temp Video] File not found: ${filePath}`);
+    res.status(404).send("File not found");
+  }
+});
 
   // GHOSTCUT API: Explicit User Pre-registration
   app.post("/api/ghostcut/register-user", async (req, res) => {
