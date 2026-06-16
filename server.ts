@@ -72,9 +72,9 @@ async function triggerGhostCutEngineAsyncTask(params: {
       console.warn("[GhostCut Background Engine] Pre-registration failed (non-blocking):", e);
     }
 
-    targetUrl = "https://auto-video-watermark-or-subtitles-remove.p.rapidapi.com/api/pub/video/create";
+    targetUrl = "https://ghostcut-video-watermark-remover.p.rapidapi.com/submit-task";
     headers["X-RapidAPI-Key"] = apiKey;
-    headers["X-RapidAPI-Host"] = "auto-video-watermark-or-subtitles-remove.p.rapidapi.com";
+    headers["X-RapidAPI-Host"] = "ghostcut-video-watermark-remover.p.rapidapi.com";
   } else {
     targetUrl = "https://api-en.jollytoday.com/api/pub/video/create";
     headers["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
@@ -306,8 +306,9 @@ async function startServer() {
 
   // GHOSTCUT API: Explicit User Pre-registration
   app.post("/api/ghostcut/register-user", async (req, res) => {
-    const { apiKey, apiProvider, customIdentity, mail, phone } = req.body;
-    if (!apiKey) return res.status(400).json({ error: "API Key is required to register." });
+    const { apiProvider, customIdentity, mail, phone } = req.body;
+    const apiKey = process.env.RAPIDAPI_KEY || process.env.GHOSTCUT_API_KEY || process.env.WATERMARK_ERASER_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "RAPIDAPI_KEY is missing from Render dashboard environment fields." });
     
     const provider = apiProvider || "rapidapi";
     if (provider !== "rapidapi") return res.json({ success: true, message: "Registration only applicable for RapidAPI provider." });
@@ -326,13 +327,15 @@ async function startServer() {
     }
   });
 
-  // 🌟 FULL GHOSTCUT PROXY ROUTE WITH WATERMARK COORDINATE HANDLING RESTORED
+  // 🌟 GHOSTCUT PROXY ROUTE: AUTHORIZATION KEY FORCED FROM SERVER CONFIGURATION
   app.post("/api/ghostcut/submit-task", upload.any(), async (req, res) => {
-    const { apiKey, videoUrl, apiProvider, mode, customIdentity, mail, phone } = req.body;
+    const { videoUrl, apiProvider, mode, customIdentity, mail, phone } = req.body;
     const files = req.files as Express.Multer.File[] | undefined;
     const uploadedFile = (files && files.length > 0) ? files[0] : null;
 
-    if (!apiKey) return res.status(400).json({ error: "GhostCut API Token is required." });
+    // 🔒 LOCKED OVERRIDE: Automatically binds server environment configuration securely
+    const apiKey = process.env.RAPIDAPI_KEY || process.env.GHOSTCUT_API_KEY || process.env.WATERMARK_ERASER_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "RAPIDAPI_KEY is missing from Render dashboard environment fields." });
     if (!videoUrl && !uploadedFile) return res.status(400).json({ error: "Video URL or Uploaded File is required." });
 
     const provider = apiProvider || "rapidapi";
@@ -349,9 +352,9 @@ async function startServer() {
         });
       } catch (e) {}
 
-      targetUrl = "https://auto-video-watermark-or-subtitles-remove.p.rapidapi.com/api/pub/video/create";
+      targetUrl = "https://ghostcut-video-watermark-remover.p.rapidapi.com/submit-task";
       headers["X-RapidAPI-Key"] = apiKey;
-      headers["X-RapidAPI-Host"] = "auto-video-watermark-or-subtitles-remove.p.rapidapi.com";
+      headers["X-RapidAPI-Host"] = "ghostcut-video-watermark-remover.p.rapidapi.com";
     } else {
       targetUrl = "https://api-en.jollytoday.com/api/pub/video/create";
       headers["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
@@ -373,7 +376,7 @@ async function startServer() {
       const requestBody: Record<string, any> = {
         video_url: resolvedVideoUrl,
         mode: mode || "remove_watermark",
-        watermark_type: 2, // Custom Region Removal
+        watermark_type: 2, 
         inpainting: 1
       };
 
@@ -381,7 +384,6 @@ async function startServer() {
         requestBody.customIdentity = customIdentity || "user_" + apiKey.replace(/[^a-zA-Z0-9]/g, "").slice(-12);
       }
 
-      // 🌟 WATERMARK FIELDS RESTORATION: Parse input properties cleanly to prevent UI breakage
       if (typeof req.body.inpainting !== 'undefined') requestBody.inpainting = req.body.inpainting === 'true' || req.body.inpainting === true ? 1 : 0;
       if (typeof req.body.apply_to_all_frames !== 'undefined') requestBody.apply_to_all_frames = req.body.apply_to_all_frames === 'true' || req.body.apply_to_all_frames === true;
       if (typeof req.body.duration !== 'undefined') requestBody.duration = Number(req.body.duration);
@@ -397,7 +399,6 @@ async function startServer() {
         try { resolvedRegionCoords = JSON.parse(resolvedRegionCoords); } catch (e) {}
       }
 
-      // Map coordinates back seamlessly for arrays vs object properties
       if (resolvedRegions && Array.isArray(resolvedRegions) && resolvedRegions.length > 0) {
         const mappedBoxes = resolvedRegions.map((r: any) => ({
           x: Number(r.x) || 0, y: Number(r.y) || 0, w: Number(r.w) || 20, h: Number(r.h) || 10,
@@ -438,10 +439,14 @@ async function startServer() {
     }
   });
 
-  // GHOSTCUT API: Pull Task Result / Polling
+  // 🌟 GHOSTCUT STATUS ROUTE: KEY REQUIRED PASS COMPLETELY AUTOMATED VIA ENVIRONMENT VARIABLES
   app.post("/api/ghostcut/check-task", async (req, res) => {
-    const { apiKey, taskId, apiProvider } = req.body;
-    if (!apiKey || !taskId) return res.status(400).json({ error: "API Key and Task ID are required." });
+    const { taskId, apiProvider } = req.body;
+    
+    // 🔒 LOCKED OVERRIDE: Reads directly from backend settings
+    const apiKey = process.env.RAPIDAPI_KEY || process.env.GHOSTCUT_API_KEY || process.env.WATERMARK_ERASER_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "RAPIDAPI_KEY is missing from Render dashboard environment fields." });
+    if (!taskId) return res.status(400).json({ error: "Task ID is required." });
 
     if (String(taskId).startsWith("sim_")) {
       res.json({ data: { status: "success", progress: 100, video_url: "/ogbeatz_logo.svg" }, status: "success", progress: 100 });
@@ -453,9 +458,9 @@ async function startServer() {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
 
     if (provider === "rapidapi") {
-      targetUrl = `https://auto-video-watermark-or-subtitles-remove.p.rapidapi.com/api/pub/video/get_result?task_id=${taskId}`;
+      targetUrl = `https://ghostcut-video-watermark-remover.p.rapidapi.com/task-status/${taskId}`;
       headers["X-RapidAPI-Key"] = apiKey;
-      headers["X-RapidAPI-Host"] = "auto-video-watermark-or-subtitles-remove.p.rapidapi.com";
+      headers["X-RapidAPI-Host"] = "ghostcut-video-watermark-remover.p.rapidapi.com";
     } else {
       targetUrl = `https://api-en.jollytoday.com/api/pub/video/get_result?task_id=${taskId}`;
       headers["Authorization"] = apiKey.startsWith("Bearer ") ? apiKey : `Bearer ${apiKey}`;
