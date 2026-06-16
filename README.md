@@ -1,205 +1,178 @@
-# 🏗️ OG BEATZ Vault — Principal Technical Blueprint & Operations Manual
+# 🏗️ OG BEATZ Vault — Principal Systems Architect Blueprint
 
-This document serves as the official **Production Architecture Specification, Integration Manual, and System Blueprint** for the OG BEATZ Vault application. Built on a modernized full-stack framework pairing a React 18 / Vite frontend with an Express.js backend, this platform handles catalog curation, sub-millisecond hardware-accelerated audio processing, CRM contact operations, secure link generation, and background-queued AI video de-watermarking/inpainting pipelines.
-
----
-
-## 💻 1. Technology Stack & Core Architecture
-
-The system transitions seamlessly between a reactive, offline-first React Single Page Application (SPA) and an Express.js server-side controller, designed for resilience, uptime, and thread-isolated asynchronous workflows.
-
-### Front-End Infrastructure
-*   **Core UI Engine**: React 18+ (strictly written in TypeScript-compliant syntax).
-*   **Build Architecture**: Vite.js utilizing decoupled hot-rebuild capabilities.
-*   **Animation System**: `motion` (`motion/react`) driving elastic animations, high-fashion modal slide-ins, and page transition frames.
-*   **Design & Layout**: Tailwind CSS powered by pure theme configurations and deep obsidian black accents (`#020617`, `#09090b`).
-*   **Data Visualization**: `recharts` powering custom-drawn SVGs to monitor real-time CRM performance, discovery metrics, and active background video engine logs.
-
-### Back-End System Logic
-*   **Runtime Host**: Node.js utilizing Express.js for fast route mapping and REST API handshakes.
-*   **File Transfer Interceptors**: `multer` handling memory buffers securely for standard files.
-*   **Background Worker Queue**: Thread-isolated async pipeline controller for heavy cloud computational requests (e.g., GhostCut API interactions, image rendering) to keep API server response times below 200ms.
+This document serves as the official **Technical Architecture Specification and System Blueprint** for the OG BEATZ Vault application. Designed for modularity, sub-millisecond audio playback responsivity, offline-first reliability, and clean separation of concerns, this system represents a modern high-fidelity CRM and media delivery platform.
 
 ---
 
-## 📂 2. Structured Directory Trees
+## 💻 1. Architectural Philosophy & Technology Stack
 
+The application is structured as a **Single Page Application (SPA)** utilizing a unidirectional data flow design pattern. A deep-dark cyberpunk industrial visual shell operates on top of highly reactive data models.
+
+### Key Frameworks & Software Elements
+*   **Core UI Runtime**: React 18+ (TypeScript Strict Mode enabled).
+*   **Build Architecture & Bundling**: Vite.js utilizing fast module reloading (FMR) configuration.
+*   **Hardware-Accelerated Animation Layer**: `motion` (`motion/react`) for fluid transitions, spring-based visual mechanics, list item entrances, and drawer actions.
+*   **Vector Icon Matrix**: `lucide-react` for clean SVG vector scaling.
+*   **Data Visualization Engine**: `recharts` for charting user analytics and tracking CRM transactions over rolling parameters.
+*   **Styling Engine**: Tailwind CSS featuring modern `@import "tailwindcss";` configurations, customizable thematic system variables, and responsive layout prefixes.
+
+### Architectural Patterns
+*   **Unidirectional State-to-Storage (USS)**: The primary application state lives globally in high-level contexts and synchronizes to local namespaces on the viewport disk via robust storage interceptors.
+*   **Functional Hook-Driven Audio Context (FHAC)**: Encapsulates hardware audio events in a unified class, providing immediate non-blocking actions.
+*   **Deterministic Heuristics Engine (DHE)**: Resolves heavy ML-style content tagging entirely client-side, analyzing tokenized strings.
+
+---
+
+## 📂 2. Structural Structural Schema & Directory Trees
+
+### Directory Tree Representation
 ```text
 / (Workspace Root)
-├── package.json                    # Dependencies, compiled scripts, and entry definitions
-├── tsconfig.json                   # Strict TypeScript type declaration overrides
-├── vite.config.ts                  # Development dev-server ingress mappings
-├── server.ts                       # Dual Express.js production runtime and development proxy
-├── .env.example                    # Clean declaration template for environment secrets
-├── README.md                       # Architecture layout and operational guide (This file)
+├── package.json                    # Package manifest, metadata, and script directives
+├── tsconfig.json                   # Strict TypeScript type resolution rules
+├── vite.config.ts                  # Port 3000 mapping and development rules
+├── README.md                       # Architectural specification file (This file)
 └── src/
-    ├── main.tsx                    # Native React entry point
-    ├── index.css                   # Global styles incorporating Tailwind CSS theme configurations
-    ├── types.ts                    # Declared typings and entity structures
-    ├── App.tsx                     # Frame routing system and root context distributor
-    ├── components/                 # Extracted UI component files
+    ├── main.tsx                    # System entry point
+    ├── index.css                   # Global styles importing Tailwind CSS variables
+    ├── types.ts                    # Global contract and entity types
+    ├── App.tsx                     # Top-level view router and user shell controller
+    ├── components/                 # Component sub-modules
     │   ├── Shell.tsx               # Primary interface shell (navigation and state gauges)
-    │   ├── AudioPlayer.tsx         # Persistent hardware media controller
-    │   ├── WatermarkRemover.tsx    # Video cleanser frontend featuring the Recharts inpainting tracker
-    │   └── YouTubeHub.tsx          # CRM discovery tracking dashboards
+    │   ├── AudioPlayer.tsx         # Persistent hardware media controller 
+    │   ├── UploadZone.tsx          # Drag-and-drop file receiver
+    │   ├── ShareModal.tsx          # Sharing generator & URL link creator
+    │   ├── SharePortal.tsx         # External A&R public presentation page
+    │   ├── ClientPortal.tsx        # Track-listing page for logged-in clients
+    │   ├── PromoPackModal.tsx      # Multi-format automated text generators
+    │   ├── VideoGenerationModal.tsx # Dynamic visual parameter compiler
+    │   ├── VideoPreviewModal.tsx   # Simulates motion design layout previews
+    │   ├── TrackOptionsMenu.tsx    # Context action menus for catalog entries
+    │   ├── AddClientModal.tsx      # Multi-step CRM contact forms
+    │   ├── EditClientModal.tsx     # Contact modification dialogs
+    │   ├── EditPlaylistModal.tsx   # Collection descriptor updates
+    │   ├── AddTrackToPlaylistModal.tsx # Association tools
+    │   └── EditTrackModal.tsx      # Master metadata adjustments
     ├── context/                    # State managers
-    │   ├── AudioContext.tsx        # Audio hardware tracking
-    │   └── MediaStoreContext.tsx   # Local storage and cloud database synchronization hooks
-    └── services/                   # Outer integrations
-        └── geminiService.ts        # Gemini SDK interfaces
+    │   ├── AudioContext.tsx        # Global HTML5 Audio state wrapper
+    │   └── MediaStoreContext.tsx   # Catalog, Client Directory & Messaging DB Controller
+    ├── services/                   # Service integrations
+    │   └── geminiService.ts        # Modular client endpoint
+    └── lib/                        # Infrastructure
+        └── supabase.ts             # Conditional database connections
+```
+
+### Component Relationship Architecture
+```text
+                    [ App.tsx ] (Routing & Root Shell)
+                         │
+         ┌───────────────┼───────────────┐
+         ▼               ▼               ▼
+     [ Shell ]     [ SharePortal ] [ ClientPortal ]
+         │
+  ┌──────┴───────────────┬────────────────────────────┐
+  ▼                      ▼                            ▼
+[ Views ]        [ Modals / Dialogs ]          [ AudioPlayer ]
+ - Dashboard      - UploadZone                  (Subscribes to AudioContext)
+ - Tracks         - EditTrackModal / ShareModal
+ - Playlists      - AddClientModal / EditClientModal
+ - CRM            - PromoPackModal / VideoGenerationModal
+ - Messaging      - AddTrackToPlaylistModal
+ - Analytics
 ```
 
 ---
 
-## ⚙️ 3. Core Feature Specifications
+## ⚙️ 3. Core Features & Functional Logic Flow
 
 ### A. Non-Blocking Audio Playback Pipeline
-*   Hardware-accelerated media rendering through customized `AudioContext` states. 
-*   Prevents application freezes by isolating volume memory arrays, auto-resolving broken paths, and keeping track states stable across page updates.
+The audio framework ensures zero playback latency and continuous play state across virtual routes.
+
+```text
+User Actions ──> [ AudioContext commands ] ──> [ Instantiates HTML5 Audio ]
+                       │                              │
+                       ▼                              ▼
+             Sets Current Track Data        Drives Progress Counters
+             Triggers Activity Log          Updates Playback Statuses
+```
+*   **Volume Preserves**: Read/write events on client state files maintain selected volume percentages.
+*   **Waveform Synthesizer simulation**: Draws an custom active visual stream mapped directly to current time codes.
 
 ### B. Heuristic Track Parsing (DHE Engine)
-When a file is loaded, it flows through a sequential regex scanner inside the client state:
+When a file is loaded, it flows through a sequential regex scanner:
 1.  **Stage 1: Extension Truncation**: `.mp3`/`.wav`/`.flac` extensions are removed.
-2.  **Stage 2: Tempo (BPM) Extraction**: Matches values between 60 and 200 (e.g., `140BPM`).
+2.  **Stage 2: Tempo (BPM) Extraction**:
+    `const bpmMatch = cleanLower.match(/(\d{2,3})\s*(?:bpm|BPM)/);`
+    Matches speed values between 60 and 200.
 3.  **Stage 3: Key Signature Match**: Matches strings against a sorted array of structural notes (`C#m`, `Am`, `G`) descending by character length to prevent partial matches (e.g., matching "F" in "F#m").
 4.  **Stage 4: Semantic Genre Mapping**: Tests the presence of lower-case strings to associate mood tags automatically:
     *   `lofi`, `study`, `chillhop` -> Categorized as `Lofi`, `Chill`, `Relaxed`
     *   `trap`, `808` -> Categorized as `Trap`, `Dark`, `Heavy`
     *   `drill`, `grime` -> Categorized as `Drill`, `Aggressive`, `Gritty`
 
-### C. GhostCut AI Inpainting & De-Watermarking Pipeline
-An high-precision video editing engine integrated into the interface. For large videos requiring massive cloud execution, the system employs two specialized execution patterns:
+### C. Unified Secure Sharing Model (A&R Share Portal)
+Securing music distributions without complex authentication tokens is resolved using a stateless tokenized gateway:
 
-1.  **Direct Polling Task Integration** (`/api/ghostcut/submit-task`):
-    Allows live client-side progress listening. When active, it displays a low-latency **Recharts visual simulation running on the client GPU**, exposing rolling live stats (Pixel Cleanse Index, GPU Thread Load in FPS, and Compression Residuals) synced to the rendering process.
-2.  **Lightweight Multi-Threaded Queue Event** (`/api/submit-task`):
-    Responds immediately back to calling clusters under 200 milliseconds to avoid server gateway timeouts, running the underlying GhostCut client requests within an isolated background thread.
-
----
-
-## 📡 4. REST Backend API Specification
-
-To prevent exposing secure vendor tokens (such as `GHOSTCUT_API_KEY`) to front-end inspection screens, all external requests are redirected through the Express.js route proxies:
-
-### 📥 POST `/api/ghostcut/submit-task`
-*   **Description**: Submits video URLs and coordinates of watermarks directly to GhostCut.
-*   **Payload Format**: Form-Data or JSON encoding.
-*   **Request Parameters**:
-    ```json
-    {
-      "video_url": "https://example.com/source.mp4",
-      "mode": "remove_watermark",
-      "rect_array": "[{\"x\":10, \"y\":10, \"width\":100, \"height\":50}]",
-      "inpainting": "true"
-    }
-    ```
-*   **Response (200 OK)**:
-    ```json
-    {
-      "status": "success",
-      "task_id": "gc_task_908127389"
-    }
-    ```
-
-### 📥 POST `/api/submit-task` (High-Velocity Background Thread Trigger)
-*   **Description**: Registers processing jobs and triggers background workers asynchronously. Returns immediately to prevent HTTP Render gateway timeouts.
-*   **Payload Format**: JSON encoding.
-*   **Request Parameters**:
-    ```json
-    {
-      "video_url": "https://example.com/source.mp4",
-      "rect_array": [],
-      "mode": "video_crop",
-      "inpainting": false
-    }
-    ```
-*   **Response (202 Accepted)**:
-    ```json
-    {
-      "status": "queued",
-      "message": "Processing task successfully registered with the cloud cluster.",
-      "task_id": "task_1718413248834"
-    }
-    ```
-
-### 🔍 GET `/api/ghostcut/check-task`
-*   **Description**: Polls state queues using specific unique IDs.
-*   **Query Parameters**: `?task_id=gc_task_908127389`
-*   **Response (200 OK)**:
-    ```json
-    {
-      "status": "completed",
-      "progress": 100,
-      "video_url": "https://processed-output-storage.com/output.mp4"
-    }
-    ```
-
----
-
-## 🔒 5. Environment Variables Configuration
-
-Create a `.env` file in the root directory. To run this system correctly, specify your credentials as shown below:
-
-```env
-# Application Runtime Configuration
-NODE_ENV=production
-PORT=3000
-
-# GhostCut Cloud Compilers
-GHOSTCUT_API_KEY=your_ghostcut_token_here
-WATERMARK_ERASER_API_KEY=your_backup_token_here
-GHOSTCUT_PROVIDER=rapidapi # Or "direct" for JollyToday Core
-
-# Google Developer Console Credentials (YouTube Integrations)
-GOOGLE_CLIENT_ID=your_client_id_here
-GOOGLE_CLIENT_SECRET=your_client_secret_here
+```text
+[ Producer Dashboard ] ──> Generates Hash Token ──> Distributes Custom Link
+                                                         │
+                                                         ▼
+[ A&R Direct Play / Downloads ] ◄── Validates Expiry ◄── [ Loads SharePortal ]
 ```
+*   **Heuristic Expiration**: Time-based expiry timestamps are checked on layout injection.
+*   **Direct Feedback Channel**: VIP visitors can send immediate comments or licensing queries back to the internal messaging queue of the producer.
+
+### D. Multi-Format Corporate Importer
+The CRM client registry handles importing CSV data securely:
+*   **Header Resolution Mapping**: Matches standard headers (`Name`, `Email`, `Company`, `Status`) across custom columns.
+*   **Status Assignment**: Missing status fields default to `offline` with active timestamps.
 
 ---
 
-## 🚀 6. Local Operations & Development
+## 🔒 4. System Constraints & Dependencies
 
-Execute the following commands from your host device terminal to bootstrap, install, inspect, and run the server instance:
+*   **Offline Fallback Mode**: If database connections block or are absent, the application gracefully routes all operations to the highly optimized fallback memory layer, ensuring 100% uptime with no terminal crashes.
+*   **Thread Safety in Client Memory**: Sequential writes serialize synchronously to `localStorage` partitions to prevent state corruption during rapid operations.
+*   **Sound Format Scope**: Audio HTML5 decoders support standard bitrates of `audio/mpeg` (mp3) and standard reference types (`audio/wav`, `audio/aac`).
 
-### Dependency Installation
+---
+
+## 🚀 5. Quick Start & Deployment Guide
+
+Follow these steps to initialize and run this exact system from a bare-metal terminal.
+
+For the **Complete Production compilation, environment configurations, and detailed step-by-step instructions for hosting the compiled system on InfinityFree with `.htaccess` URL rewrites**, please refer to our dedicated [**Deployment & InfinityFree Hosting Guide (DEPLOYMENT_GUIDE.md)**](./DEPLOYMENT_GUIDE.md).
+
+### Step 1: System Initialization
 ```bash
-# Pull all packages declared in the system package manifest
-npm install
+# Create and move into workspace directory
+mkdir ogbeatz-vault && cd ogbeatz-vault
+
+# Start a new Vite React application
+npm create vite@latest . -- --template react-ts
+
+# Install required dependencies
+npm install lucide-react recharts motion
 ```
 
-### Run Server in Development Mode
-Auto-transpile and link local Vite assets to the Express middleware on port 3000:
+### Step 2: Establish Style Sheets
+Create or edit your global CSS file `/src/index.css` to import and apply custom Tailwind themes:
+```css
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+```
+
+### Step 3: Integrate Core Modules
+Deploy types to `/src/types.ts` and set up state managers in `/src/context/` matching your specifications. Assemble your views inside `/src/components/` and load `/src/App.tsx`.
+
+### Step 4: Boot local server
 ```bash
-npm run dev
+# Clean cache files and launch dev environment
+npm run dev -- --host 0.0.0.0 --port 3000
 ```
-
-### Production Package Compilation
-Compile front-end TS concepts to fully static minified assets in `/dist`, and bundle backend dependencies with `esbuild` into `/dist/server.cjs`:
-```bash
-npm run build
-```
-
----
-
-## ☁️ 7. Render Deployment Blueprint
-
-To host this application in a live production environment on **Render.com**, configure a new **Web Service** with the following system properties:
-
-1.  **Environment**: `Node`
-2.  **Region**: Choose your nearest latency zone (e.g., `Oregon (US West)` or `Frankfurt (EU)`)
-3.  **Branch**: `main`
-4.  **Build Command**:
-    ```bash
-    npm install && npm run build
-    ```
-5.  **Start Command**:
-    ```bash
-    npm run start
-    ```
-6.  **Advanced Options / Environment Variables**:
-    *   Add your `GHOSTCUT_API_KEY` or `WATERMARK_ERASER_API_KEY`.
-    *   Set `PORT` to database-isolated or automated variables (Render supplies this dynamically, which is read by `process.env.PORT` in our server setup).
-    *   Set `NODE_ENV` to `production`.
-
----
-*Principal Systems Architecture Manual — Persisted in the Repository Root.*
+Your high-fidelity industrial console will successfully compile on port 3000!

@@ -158,7 +158,6 @@ export default function App() {
     | "client-detail"
     | "videos"
     | "youtube"
-    | "watermark"
   >("dashboard");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedMessageClientId, setSelectedMessageClientId] = useState<
@@ -1675,7 +1674,7 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
           </div>
 
           <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart
                 data={chartData}
                 margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
@@ -5221,7 +5220,6 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
         {activeView === "clients" && renderClients()}
         {activeView === "playlists" && renderPlaylists()}
         {activeView === "videos" && renderVideos()}
-        {activeView === "watermark" && <WatermarkRemover />}
         {activeView === "activity" && renderActivity()}
         {activeView === "messages" && renderMessages()}
         {activeView === "sharing" && renderSharing()}
