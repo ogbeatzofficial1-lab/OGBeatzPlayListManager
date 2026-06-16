@@ -2397,7 +2397,7 @@ Return valid JSON with the single key: 'replyText'.`;
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("/*", (req, res, next) => {
+   app.get('/*splat', (req, res) => {
       if (req.path.startsWith('/api/')) return next();
       res.sendFile(path.join(distPath, "index.html"));
     });
