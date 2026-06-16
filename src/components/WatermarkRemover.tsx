@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect, DragEvent } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import type { DragEvent } from 'react';
 import { 
   Video, Sparkles, Sliders, Play, Pause, Download, 
   Trash2, ShieldCheck, Key, RefreshCw, Layers, Lock, AlertCircle, CheckCircle2 
 } from 'lucide-react';
 import { useMediaStore } from '../context/MediaStoreContext';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 type GhostCutMode = 'remove_watermark' | 'remove_subtitles' | 'video_crop';
@@ -129,13 +130,17 @@ export default function WatermarkRemover() {
   const [selectedVideoName, setSelectedVideoName] = useState<string>('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   
-  const [apiKey, setApiKey] = useState<string>(() => {
-    return localStorage.getItem("GHOSTCUT_API_KEY") || localStorage.getItem("WATERMARK_ERASER_API_KEY") || '';
-  });
-  const [isKeySaved, setIsKeySaved] = useState<boolean>(!!apiKey);
-  const [apiProvider, setApiProvider] = useState<ProviderType>(() => {
-    return (localStorage.getItem("GHOSTCUT_PROVIDER") as ProviderType) || 'rapidapi';
-  });
+  const [apiKey, setApiKey] = useState<string>('');
+  const [isKeySaved, setIsKeySaved] = useState<boolean>(false);
+  const [apiProvider, setApiProvider] = useState<ProviderType>('rapidapi');
+  
+  useEffect(() => {
+    const saved = localStorage.getItem("GHOSTCUT_API_KEY") || localStorage.getItem("WATERMARK_ERASER_API_KEY") || '';
+    const prov = (localStorage.getItem("GHOSTCUT_PROVIDER") as ProviderType) || 'rapidapi';
+    setApiKey(saved);
+    setIsKeySaved(!!saved);
+    setApiProvider(prov);
+  }, []);
   
   // GhostCut optimization parameters
   const [ghostcutMode, setGhostcutMode] = useState<GhostCutMode>('remove_watermark');
@@ -251,7 +256,7 @@ export default function WatermarkRemover() {
     addToast("Loaded video from your Promo Archive.", "info");
   };
 
-  // Canvas preview rendering loop
+  // Canvas preview rendering loop - FIXED: no setState inside loop
   useEffect(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
@@ -261,29 +266,18 @@ export default function WatermarkRemover() {
     if (!ctx) return;
 
     const renderLoop = () => {
-      if (video.paused || video.ended) {
-        setIsPlaying(false);
-      }
-      
-      setCurrentTime(video.currentTime || 0);
-
       const iw = video.videoWidth;
       const ih = video.videoHeight;
       if (iw && ih) {
         if (canvas.width !== iw) canvas.width = iw;
         if (canvas.height !== ih) canvas.height = ih;
-
-        // Draw basic video preview frame
         ctx.drawImage(video, 0, 0, iw, ih);
-
-        // Apply visual transparent overlay preview inside all target regions
         if (ghostcutMode === 'remove_watermark') {
           watermarkBoxes.forEach((box, idx) => {
             const rx = (box.x / 100) * iw;
             const ry = (box.y / 100) * ih;
             const rw = (box.w / 100) * iw;
             const rh = (box.h / 100) * ih;
-
             ctx.strokeStyle = idx === activeBoxIndex ? '#3b82f6' : '#94a3b8';
             ctx.lineWidth = idx === activeBoxIndex ? 3 : 1.5;
             ctx.strokeRect(rx, ry, rw, rh);
@@ -294,20 +288,14 @@ export default function WatermarkRemover() {
           });
         }
       }
-
       requestRef.current = requestAnimationFrame(renderLoop);
     };
 
-    if (isPlaying) {
-      requestRef.current = requestAnimationFrame(renderLoop);
-    } else {
-      renderLoop();
-    }
-
+    requestRef.current = requestAnimationFrame(renderLoop);
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [isPlaying, watermarkBoxes, activeBoxIndex, useInpainting, selectedVideoUrl, isProcessing, ghostcutMode]);
+  }, [watermarkBoxes, activeBoxIndex, useInpainting, selectedVideoUrl, isProcessing, ghostcutMode]);
 
   const handleTogglePlay = () => {
     if (videoRef.current) {
@@ -543,6 +531,13 @@ export default function WatermarkRemover() {
 
             const finalUrl = cleanUrl || selectedVideoUrl;
             setCleanVideoResultUrl(finalUrl);
+            // CRITICAL FIX: load cleaned video back into player
+            setSelectedVideoUrl(finalUrl);
+            setVideoFile(null);
+            if (videoRef.current) {
+              videoRef.current.src = finalUrl;
+              videoRef.current.load();
+            }
 
             // Save to promo list
             const newVideoId = 'ghost-' + Math.random().toString(36).substring(2, 9);
@@ -732,6 +727,9 @@ export default function WatermarkRemover() {
                     setDuration(d);
                     setCustomEnd(Math.round(d));
                   }}
+                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
                 />
                 <canvas ref={canvasRef} className="w-full h-full object-contain" />
 
@@ -900,9 +898,9 @@ export default function WatermarkRemover() {
 
                 {/* Time Selection Readout Tag */}
                 <div className="text-xs bg-blue-950 text-blue-400 px-2.5 py-1 rounded-md border border-blue-900/60 font-medium font-mono">
-                  {processRange === 'preview' && '⏱️ Range: First 5s'}
-                  {processRange === 'full' && '⏱️ Range: Entire Video'}
-                  {processRange === 'custom' && `⏱️ Range: ${customStart}s - ${customEnd}s`}
+                  {processRange === 'preview' && '⏱ Range: First 5s'}
+                  {processRange === 'full' && '⏱ Range: Entire Video'}
+                  {processRange === 'custom' && `⏱ Range: ${customStart}s - ${customEnd}s`}
                 </div>
 
                 {selectedVideoUrl && (
@@ -1031,7 +1029,7 @@ export default function WatermarkRemover() {
                   processRange === 'custom' ? 'bg-blue-600 border-blue-500 text-white font-bold' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
                 }`}
               >
-                ⏱️ Custom
+                ⏱ Custom
               </button>
             </div>
 
