@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Search,
   Plus,
@@ -50,6 +50,7 @@ import {
   Volume2,
   Cpu,
   Sparkles,
+  ArrowUpDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -168,6 +169,13 @@ export default function App() {
   const [trackListViewMode, setTrackListViewMode] = useState<
     "cards" | "columns" | "list"
   >("cards");
+  const [selectedTrackIds, setSelectedTrackIds] = useState<string[]>([]);
+  const [batchGenre, setBatchGenre] = useState("");
+  const [batchMood, setBatchMood] = useState("");
+  const [batchCustomTags, setBatchCustomTags] = useState("");
+  const [batchMode, setBatchMode] = useState<"append" | "overwrite">("append");
+  const [sortBy, setSortBy] = useState<"date_added" | "name" | "bpm">("date_added");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [expandedTrackIds, setExpandedTrackIds] = useState<string[]>([]);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
@@ -786,7 +794,7 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
   }, [clients, clientSearchQuery]);
 
   const filteredTracks = useMemo(() => {
-    return tracks.filter((t) => {
+    const filtered = tracks.filter((t) => {
       const q = searchQuery.toLowerCase();
       return (
         t.name.toLowerCase().includes(q) ||
@@ -794,7 +802,89 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
         t.tags?.some((tag) => tag.toLowerCase().includes(q))
       );
     });
-  }, [tracks, searchQuery]);
+
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === "date_added") {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        comparison = timeA - timeB;
+      } else if (sortBy === "name") {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortBy === "bpm") {
+        const bpmA = typeof a.bpm === "number" ? a.bpm : 0;
+        const bpmB = typeof b.bpm === "number" ? b.bpm : 0;
+        comparison = bpmA - bpmB;
+      }
+
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+  }, [tracks, searchQuery, sortBy, sortOrder]);
+
+  const isAllTracksSelected = useMemo(() => {
+    return (
+      filteredTracks.length > 0 &&
+      filteredTracks.every((t) => selectedTrackIds.includes(t.id))
+    );
+  }, [filteredTracks, selectedTrackIds]);
+
+  const toggleSelectAllTracks = useCallback(() => {
+    if (isAllTracksSelected) {
+      setSelectedTrackIds((prev) =>
+        prev.filter((id) => !filteredTracks.some((t) => t.id === id))
+      );
+    } else {
+      setSelectedTrackIds((prev) => {
+        const next = [...prev];
+        filteredTracks.forEach((t) => {
+          if (!next.includes(t.id)) {
+            next.push(t.id);
+          }
+        });
+        return next;
+      });
+    }
+  }, [filteredTracks, isAllTracksSelected]);
+
+  const handleBatchAssignTags = useCallback(
+    async (newTags: string[], overwrite: boolean = false) => {
+      if (selectedTrackIds.length === 0) return;
+      const tagsToApply = newTags.filter((tag) => tag.trim().length > 0);
+      if (tagsToApply.length === 0) {
+        addToast("Please provide or select at least one tag to assign.", "info");
+        return;
+      }
+
+      addToast(`Batch updating ${selectedTrackIds.length} track(s)...`, "info");
+      try {
+        let succeedCount = 0;
+        for (const trackId of selectedTrackIds) {
+          const tr = tracks.find((t) => t.id === trackId);
+          if (tr) {
+            let updatedTagsList: string[] = [];
+            if (overwrite) {
+              updatedTagsList = tagsToApply;
+            } else {
+              const existing = tr.tags || [];
+              const merged = new Set([...existing, ...tagsToApply]);
+              updatedTagsList = Array.from(merged);
+            }
+            await updateTrack(trackId, { tags: updatedTagsList });
+            succeedCount++;
+          }
+        }
+        addToast(
+          `Successfully updated ${succeedCount} track(s) with batch tags!`,
+          "success"
+        );
+        setSelectedTrackIds([]);
+      } catch (err: any) {
+        console.error("Batch update failed:", err);
+        addToast(`Batch tag update failed: ${err.message || err}`, "error");
+      }
+    },
+    [selectedTrackIds, tracks, updateTrack, addToast]
+  );
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -2074,6 +2164,45 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
           />
         </div>
 
+        {/* Sorting selector */}
+        <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-900 p-1 rounded-2xl self-stretch md:self-auto shrink-0 shadow-inner h-[44px]">
+          <span className="text-[10px] font-black uppercase text-zinc-500 tracking-wider pl-3 pr-1 select-none whitespace-nowrap">
+            Sort By:
+          </span>
+          <select
+            value={sortBy}
+            onChange={(e) => {
+              const val = e.target.value as "date_added" | "name" | "bpm";
+              setSortBy(val);
+              if (val === "date_added") {
+                setSortOrder("desc");
+              } else {
+                setSortOrder("asc");
+              }
+            }}
+            className="bg-transparent text-[10px] font-black uppercase tracking-widest text-zinc-300 hover:text-white transition-all cursor-pointer focus:outline-none border-none py-1.5 pl-2 pr-7 appearance-none rounded-xl"
+            style={{
+              backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 8px center',
+              backgroundSize: '12px'
+            }}
+          >
+            <option value="date_added" className="bg-zinc-950 text-zinc-300 font-black">Date Added</option>
+            <option value="name" className="bg-zinc-950 text-zinc-300 font-black">Name</option>
+            <option value="bpm" className="bg-zinc-950 text-zinc-300 font-black">BPM</option>
+          </select>
+          
+          <button
+            type="button"
+            onClick={() => setSortOrder(prev => prev === "asc" ? "desc" : "asc")}
+            title={`Toggle sort order (Current: ${sortOrder === "asc" ? "Ascending" : "Descending"})`}
+            className="p-1 rounded-xl text-zinc-500 hover:text-white hover:bg-zinc-900/40 w-[34px] h-[34px] flex items-center justify-center transition-all shrink-0"
+          >
+            <ArrowUpDown className={`w-3.5 h-3.5 transition-transform duration-300 ${sortOrder === 'desc' ? 'rotate-180 text-orange-500' : 'text-zinc-400'}`} />
+          </button>
+        </div>
+
         {/* Layout View Preferences Selector */}
         <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-900 p-1 rounded-2xl self-stretch md:self-auto shrink-0 shadow-inner">
           <button
@@ -2394,7 +2523,16 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-900 text-[10px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-950/40">
-                <th className="py-5 px-6">Name</th>
+                <th className="py-5 pl-8 pr-2 w-12 text-center">
+                  <input
+                    type="checkbox"
+                    checked={isAllTracksSelected}
+                    onChange={toggleSelectAllTracks}
+                    title="Select All Tracks"
+                    className="w-4 h-4 rounded border-zinc-800 bg-zinc-900 text-orange-500 focus:ring-orange-500/25 focus:ring-offset-zinc-950 accent-orange-500 cursor-pointer"
+                  />
+                </th>
+                <th className="py-5 px-4">Name</th>
                 <th className="py-5 px-4 hidden sm:table-cell text-center">
                   BPM
                 </th>
@@ -2415,13 +2553,32 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
             <tbody className="divide-y divide-zinc-900/40">
               {filteredTracks.map((track) => {
                 const info = getTrackInfoFromTags(track.tags);
+                const isSelected = selectedTrackIds.includes(track.id);
                 return (
                   <tr
                     key={track.id}
-                    className="group hover:bg-zinc-900/30 transition-colors"
+                    className={`group hover:bg-zinc-900/30 transition-colors ${
+                      isSelected ? "bg-orange-500/5 hover:bg-orange-500/10" : ""
+                    }`}
                   >
+                    {/* Multiselect Checkbox */}
+                    <td className="py-4 pl-8 pr-2 w-12 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setSelectedTrackIds((prev) =>
+                            prev.includes(track.id)
+                              ? prev.filter((id) => id !== track.id)
+                              : [...prev, track.id]
+                          );
+                        }}
+                        className="w-4 h-4 rounded border-zinc-800 bg-zinc-900 text-orange-500 focus:ring-orange-500/25 focus:ring-offset-zinc-950 accent-orange-500 cursor-pointer"
+                      />
+                    </td>
+
                     {/* Name column */}
-                    <td className="py-4 px-6">
+                    <td className="py-4 px-4">
                       <div className="flex items-center gap-4">
                         <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-900 shrink-0 group">
                           <img
@@ -5791,6 +5948,173 @@ Generated via OGBeatz Mastering Suite - Copyright 2026. All rights Reserved.
           />
         )}
       </AnimatePresence>
+
+      {/* Floating Toolbar for Batch tagging selected tracks */}
+      {trackListViewMode === "columns" && selectedTrackIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-full max-w-5xl px-4 animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className="bg-zinc-950/95 border border-zinc-800 p-4 md:p-6 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-xl flex flex-col gap-4 text-white">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-zinc-900">
+              <div className="flex items-center gap-3">
+                <div className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
+                <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white">
+                  {selectedTrackIds.length} Track{selectedTrackIds.length > 1 ? 's' : ''} Selected for Batch Tagging
+                </h4>
+              </div>
+              <button
+                onClick={() => setSelectedTrackIds([])}
+                className="text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-all underline decoration-zinc-800 underline-offset-4 cursor-pointer"
+              >
+                Clear Selection
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+              {/* Genre category selection */}
+              <div className="space-y-1.5 text-left">
+                <label className="block text-[8px] font-black uppercase tracking-widest text-zinc-500">
+                  Genre Category
+                </label>
+                <div className="relative">
+                  <select
+                    value={batchGenre}
+                    onChange={(e) => setBatchGenre(e.target.value)}
+                    className="w-full bg-zinc-900/50 border border-zinc-800 px-3 py-2 text-xs font-bold text-zinc-300 focus:border-orange-500/50 focus:outline-none appearance-none rounded-xl h-[40px]"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 12px center',
+                      backgroundSize: '12px'
+                    }}
+                  >
+                    <option value="" className="bg-zinc-950 text-zinc-350">— Select Genre —</option>
+                    <option value="Trap" className="bg-zinc-950 text-zinc-300">Trap</option>
+                    <option value="Hip Hop" className="bg-zinc-950 text-zinc-300">Hip Hop</option>
+                    <option value="Lofi" className="bg-zinc-950 text-zinc-300">Lofi</option>
+                    <option value="Drill" className="bg-zinc-950 text-zinc-300">Drill</option>
+                    <option value="R&B" className="bg-zinc-950 text-zinc-300">R&B</option>
+                    <option value="Cinematic" className="bg-zinc-950 text-zinc-300">Cinematic</option>
+                    <option value="Boom Bap" className="bg-zinc-950 text-zinc-300">Boom Bap</option>
+                    <option value="West Coast" className="bg-zinc-950 text-zinc-300">West Coast</option>
+                    <option value="Electro" className="bg-zinc-950 text-zinc-300">Electro</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Mood category selection */}
+              <div className="space-y-1.5 text-left">
+                <label className="block text-[8px] font-black uppercase tracking-widest text-zinc-500">
+                  Mood Tag
+                </label>
+                <div className="relative">
+                  <select
+                    value={batchMood}
+                    onChange={(e) => setBatchMood(e.target.value)}
+                    className="w-full bg-zinc-900/50 border border-zinc-800 px-3 py-2 text-xs font-bold text-zinc-300 focus:border-orange-500/50 focus:outline-none appearance-none rounded-xl h-[40px]"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 12px center',
+                      backgroundSize: '12px'
+                    }}
+                  >
+                    <option value="" className="bg-zinc-950 text-zinc-350">— Select Mood —</option>
+                    <option value="Gritty" className="bg-zinc-950 text-zinc-300">Gritty</option>
+                    <option value="Dark" className="bg-zinc-950 text-zinc-300">Dark</option>
+                    <option value="Energetic" className="bg-zinc-950 text-zinc-300">Energetic</option>
+                    <option value="Chill" className="bg-zinc-950 text-zinc-300">Chill</option>
+                    <option value="Aggressive" className="bg-zinc-950 text-zinc-300">Aggressive</option>
+                    <option value="Smooth" className="bg-zinc-950 text-zinc-300">Smooth</option>
+                    <option value="Hypnotic" className="bg-zinc-950 text-zinc-300">Hypnotic</option>
+                    <option value="Moody" className="bg-zinc-950 text-zinc-300">Moody</option>
+                    <option value="Suspenseful" className="bg-zinc-950 text-zinc-300">Suspenseful</option>
+                    <option value="Melancholic" className="bg-zinc-950 text-zinc-300">Melancholic</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Custom tags string input */}
+              <div className="space-y-1.5 text-left">
+                <label className="block text-[8px] font-black uppercase tracking-widest text-zinc-500">
+                  Custom Tags (comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={batchCustomTags}
+                  onChange={(e) => setBatchCustomTags(e.target.value)}
+                  placeholder="e.g. key:9A, club, dynamic"
+                  className="w-full bg-zinc-900/50 border border-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-300 placeholder:text-zinc-650 rounded-xl focus:border-orange-500/50 focus:outline-none h-[40px]"
+                />
+              </div>
+
+              {/* Batch Mode option and Action Button */}
+              <div className="flex items-center gap-2 text-left">
+                <div className="flex-1 space-y-1.5">
+                  <label className="block text-[8px] font-black uppercase tracking-widest text-zinc-500">
+                    Mode
+                  </label>
+                  <div className="flex bg-zinc-900 rounded-xl p-0.5 border border-zinc-800 h-[40px]">
+                    <button
+                      type="button"
+                      onClick={() => setBatchMode("append")}
+                      className={`flex-1 text-[8px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                        batchMode === "append"
+                          ? "bg-zinc-800 text-white"
+                          : "text-zinc-500 hover:text-zinc-400"
+                      }`}
+                    >
+                      Append
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBatchMode("overwrite")}
+                      className={`flex-1 text-[8px] font-black uppercase tracking-widest rounded-lg transition-all ${
+                        batchMode === "overwrite"
+                          ? "bg-orange-500 text-black font-black"
+                          : "text-zinc-500 hover:text-zinc-400"
+                      }`}
+                    >
+                      Replace
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const compiledTags: string[] = [];
+                    if (batchGenre) {
+                      compiledTags.push(`genre_category:${batchGenre}`);
+                    }
+                    if (batchMood) {
+                      compiledTags.push(`mood:${batchMood}`);
+                    }
+                    if (batchCustomTags) {
+                      const list = batchCustomTags
+                        .split(",")
+                        .map((t) => t.trim())
+                        .filter((t) => t.length > 0);
+                      compiledTags.push(...list);
+                    }
+
+                    if (compiledTags.length === 0) {
+                      addToast("Please provide or select at least one tag to assign.", "info");
+                      return;
+                    }
+
+                    await handleBatchAssignTags(compiledTags, batchMode === "overwrite");
+                    setBatchGenre("");
+                    setBatchMood("");
+                    setBatchCustomTags("");
+                  }}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-black font-black uppercase text-[10px] tracking-widest rounded-xl transition-all h-[40px] flex items-center justify-center cursor-pointer shadow-lg shadow-orange-500/10 active:scale-95 shrink-0"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Database Operations Toasts */}
       <div className="fixed top-24 right-6 z-50 flex flex-col gap-3 max-w-sm w-full pointer-events-none">

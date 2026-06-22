@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Save, Image as ImageIcon, Trash2, Loader2, Sparkles, Key, LogIn, LogOut } from 'lucide-react';
+import { X, Save, Image as ImageIcon, Trash2, Loader2, Sparkles, Key, LogIn, LogOut, Shuffle, Lock, Download } from 'lucide-react';
 import { Track } from '../types';
 import { useMediaStore } from '../context/MediaStoreContext';
 
@@ -19,9 +19,19 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const lyricsInputRef = useRef<HTMLInputElement>(null);
 
+  // Cover Gen States
   const [aiPrompt, setAiPrompt] = useState('');
   const [generatingArt, setGeneratingArt] = useState(false);
   const [pollinationsKeyConnected, setPollinationsKeyConnected] = useState(() => !!localStorage.getItem("POLLINATIONS_USER_KEY"));
+  
+  // Advanced features state
+  const [aiModel, setAiModel] = useState<"flux" | "flux-realism" | "flux-anime" | "any-dark" | "turbo">("flux");
+  const [aiAspect, setAiAspect] = useState<"1:1" | "9:16" | "16:9">("1:1");
+  const [aiSeed, setAiSeed] = useState<"random" | "locked">("random");
+  const [lockedSeedValue, setLockedSeedValue] = useState<number>(0);
+  const [artStyle, setArtStyle] = useState<"none" | "cyberpunk" | "highfashion" | "vintage" | "brutalist" | "lofi">("highfashion");
+  const [addParentalLabel, setAddParentalLabel] = useState(false);
+  const [addTypographyOverlay, setAddTypographyOverlay] = useState(false);
 
   const connectPollinations = () => {
     // Generate simple redirect URI back to the application parent window route or custom callback on render
@@ -47,7 +57,23 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
   const handleSuggestPrompt = () => {
     const name = formData.name || 'Electronic Beat';
     const artist = formData.artist || 'OG Beatz';
-    setAiPrompt(`Professional high-fashion album cover art, premium layout for "${name}" by ${artist}, neon dark cyber-organic style, deep obsidian blacks, matte silver finish, intense amber glow accents, tech-forward geometric patterns, 8k resolution, cinematic lighting, ultra detailed.`);
+    const bpm = formData.bpm ? `${formData.bpm} BPM` : '';
+    const key = formData.key_signature ? `Key signature of ${formData.key_signature}` : '';
+    
+    // Check tags for automatic layout matching
+    const tagsArr = formData.tags || [];
+    const tagsStr = tagsArr.length > 0 ? `vibe matching ${tagsArr.join(', ')}` : '';
+    
+    let genreDescriptor = "tech-forward electronic beat style";
+    if (tagsArr.some(t => ['lofi', 'chill', 'relaxed'].includes(t.toLowerCase()))) {
+      genreDescriptor = "mellow cozy lofi bedroom vibe";
+    } else if (tagsArr.some(t => ['drill', 'gritty', 'aggressive'].includes(t.toLowerCase()))) {
+      genreDescriptor = "dark aggressive UK Drill aesthetic";
+    } else if (tagsArr.some(t => ['trap', 'rap', 'hip hop'].includes(t.toLowerCase()))) {
+      genreDescriptor = "high-energy trap style with booming atmospheric visualizer energy";
+    }
+
+    setAiPrompt(`Professional album cover art, premium layout for "${name}" by ${artist}. Visual theme: ${genreDescriptor}. ${bpm ? `${bpm} dynamic drive.` : ''} ${key ? `harmonic theme based on ${key}.` : ''} ${tagsStr ? `Aesthetics: ${tagsStr}.` : ''} Premium 8k resolution, custom organic cinematic lighting, deep immersive shadows, ultra detailed composition.`);
   };
 
   const handleGenerateAiArt = async () => {
@@ -61,8 +87,52 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
     
     try {
       const userKey = localStorage.getItem("POLLINATIONS_USER_KEY") || "";
-      const seed = Math.floor(Math.random() * 1000000);
-      let url = `https://gen.pollinations.ai/image/${encodeURIComponent(aiPrompt)}?model=flux&width=1024&height=1024&seed=${seed}`;
+      const seed = aiSeed === "locked" && lockedSeedValue > 0 
+        ? lockedSeedValue 
+        : Math.floor(Math.random() * 1000000);
+      
+      if (aiSeed === "random" || lockedSeedValue === 0) {
+        setLockedSeedValue(seed);
+      }
+
+      let finalPrompt = aiPrompt.trim();
+      
+      // Append style profile overrides
+      if (artStyle === "cyberpunk") {
+        finalPrompt += ", dark cyberpunk visual aesthetic, intense amber and fire accents, neon obsidian chrome detailing";
+      } else if (artStyle === "highfashion") {
+        finalPrompt += ", high-fashion editorial studio album cover art, stark metallic silver, ultra-clean minimalism, high contrast, deep shadows, 8k";
+      } else if (artStyle === "vintage") {
+        finalPrompt += ", rustic 70s vintage vinyl cover art style, analog film grain, highly saturated classic tones, warm nostalgic glow";
+      } else if (artStyle === "brutalist") {
+        finalPrompt += ", brutalist poster style, holographic chrome spikes, loud metallic distortion, technical high-contrast elements, cyber-gothic";
+      } else if (artStyle === "lofi") {
+        finalPrompt += ", cozy lofi watercolor illustration, soft pastel colors, hand-painted organic details, relaxed dreamy vibe";
+      }
+
+      // Append parental explicit label
+      if (addParentalLabel) {
+        finalPrompt += ', with a small official black and white "PARENTAL ADVISORY EXPLICIT CONTENT" logo rendered neatly in the bottom corner of the sleeve';
+      }
+
+      // Append typography overlay
+      if (addTypographyOverlay) {
+        const trackTitle = formData.name || 'Untitled';
+        const trackArtist = formData.artist || 'OG Beatz';
+        finalPrompt += `, featuring the track title "${trackTitle.toUpperCase()}" by artist "${trackArtist.toUpperCase()}" rendered as sleek modern ambient typographic text overlay in clean minimalist layout on the artwork`;
+      }
+
+      let width = 1024;
+      let height = 1024;
+      if (aiAspect === "9:16") {
+        width = 576;
+        height = 1024;
+      } else if (aiAspect === "16:9") {
+        width = 1024;
+        height = 576;
+      }
+
+      let url = `https://gen.pollinations.ai/image/${encodeURIComponent(finalPrompt)}?model=${aiModel}&width=${width}&height=${height}&seed=${seed}`;
       if (userKey) {
         url += `&key=${encodeURIComponent(userKey)}`;
       }
@@ -87,6 +157,27 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
     } finally {
       setGeneratingArt(false);
       setUploading(false);
+    }
+  };
+
+  const handleDownloadArtwork = async () => {
+    if (!formData.image_url) return;
+    try {
+      addToast("Preparing download...", "info");
+      const res = await fetch(formData.image_url);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${formData.name || 'track'}_artwork.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addToast("Artwork downloaded successfully!", "success");
+    } catch (err) {
+      console.error("Download failed:", err);
+      window.open(formData.image_url, '_blank');
     }
   };
 
@@ -153,26 +244,29 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
           const file = e.dataTransfer.files?.[0];
           if (file) handleLyricsFile(file);
         }}
-        className={`bg-zinc-950 border rounded-[2.5rem] w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl transition-all duration-300 ${
+        className={`bg-zinc-950 border rounded-[2.5rem] w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl transition-all duration-300 ${
           isDraggingLyrics ? 'border-orange-500 bg-zinc-950/90 scale-[1.01]' : 'border-zinc-900'
         }`}
       >
         <div className="p-8 border-b border-zinc-900 flex items-center justify-between sticky top-0 bg-zinc-950 z-10">
-          <h2 className="text-xl font-black uppercase tracking-tight">Edit Metadata</h2>
+          <h2 className="text-xl font-black uppercase tracking-tight">Edit Metadata & Cover Studio</h2>
           <button onClick={onClose} className="p-2 hover:bg-zinc-900 rounded-full transition-colors"><X/></button>
         </div>
         <div className="p-8 flex flex-col md:flex-row gap-8">
-          {/* Artwork Upload */}
-          <div className="w-48 space-y-4">
+          {/* Artwork Upload & AI Cover Studio Column */}
+          <div className="w-full md:w-80 space-y-5 shrink-0">
             <div 
               onClick={() => imageInputRef.current?.click()}
-              className="aspect-square bg-zinc-900 rounded-2xl border border-zinc-800 flex flex-col items-center justify-center cursor-pointer hover:border-orange-500 group overflow-hidden relative"
+              className={`bg-zinc-90 w-full rounded-2xl border border-zinc-800 flex flex-col items-center justify-center cursor-pointer hover:border-orange-500 group overflow-hidden relative shadow-inner shadow-black/60 min-h-[200px] transition-all bg-zinc-900/50 ${
+                aiAspect === "9:16" ? "aspect-[9/16]" : aiAspect === "16:9" ? "aspect-[16/9]" : "aspect-square"
+              }`}
             >
               {formData.image_url ? (
                 <>
                   <img src={formData.image_url} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <ImageIcon className="text-white w-8 h-8" />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-all duration-300 gap-1.5">
+                    <ImageIcon className="text-white w-7 h-7" />
+                    <span className="text-[7px] font-black uppercase tracking-widest text-zinc-300">Replace Image</span>
                   </div>
                 </>
               ) : (
@@ -189,6 +283,26 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
                 </div>
               )}
             </div>
+            
+            {formData.image_url && (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadArtwork}
+                  className="flex-1 py-1.5 px-3 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-white rounded-xl text-[8.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+                >
+                  <Download className="w-3 h-3 text-orange-500" /> Download Art
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(p => ({ ...p, image_url: "" }))}
+                  className="py-1.5 px-3 bg-zinc-950 hover:bg-rose-950/20 border border-zinc-900 hover:border-rose-900/35 text-zinc-550 hover:text-rose-400 rounded-xl text-[8.5px] font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 text-zinc-500"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+
             <input 
               type="file" 
               ref={imageInputRef} 
@@ -196,21 +310,20 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
               accept="image/*" 
               onChange={handleImageChange} 
             />
-            <p className="text-[9px] text-zinc-500 text-center font-medium leading-relaxed uppercase tracking-widest px-2 pb-2">Square format recommended for streaming portals</p>
+            <p className="text-[9px] text-zinc-500 text-center font-medium leading-relaxed uppercase tracking-widest px-2">
+              Recommended Square aspect ratio for streaming portals
+            </p>
 
             {/* AI Cover Art Generator Widget */}
-            <div className="p-4 bg-zinc-900/40 border border-zinc-900 rounded-2xl space-y-3">
+            <div className="p-4 bg-zinc-900/45 border border-zinc-900 rounded-2xl space-y-3.5">
               <div className="flex items-center gap-1.5 justify-between">
                 <span className="text-[9px] font-black uppercase tracking-widest text-orange-500 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-orange-500 animate-pulse" /> AI Cover Generator
+                  <Sparkles className="w-3 h-3 text-orange-500 animate-pulse" /> AI Cover Studio
                 </span>
                 <span className="text-[7px] font-mono bg-orange-500/10 border border-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded uppercase font-bold tracking-widest">
-                  Flux Engine
+                  Flux-2026
                 </span>
               </div>
-              <p className="text-[8px] text-zinc-500 leading-normal">
-                Generate highly polished, production-ready release visuals automatically.
-              </p>
 
               {/* Pollinations BYOP Authentication section */}
               <div className="flex items-center justify-between bg-zinc-950/60 p-2 border border-zinc-850 rounded-xl text-[9px]">
@@ -239,6 +352,139 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
                 )}
               </div>
 
+              {/* Options Panel */}
+              <div className="space-y-3 pt-1">
+                {/* Model Selector */}
+                <div className="space-y-1 text-left">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 block">
+                    AI Generation Model
+                  </label>
+                  <select
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value as any)}
+                    className="w-full bg-zinc-950 border border-zinc-850 rounded-lg px-2 py-1.5 focus:border-orange-500 text-[9px] font-mono text-zinc-300 outline-none cursor-pointer"
+                  >
+                    <option value="flux">⚡ Flux Schnell (Authentic Detail)</option>
+                    <option value="flux-realism">📸 Flux Realism (Photorealistic)</option>
+                    <option value="flux-anime">🎨 Flux Anime (Illustration/Arts)</option>
+                    <option value="any-dark">🌌 Any Dark (Immersive Cosmic)</option>
+                    <option value="turbo">🚀 Turbo Speed (Fast Render)</option>
+                  </select>
+                </div>
+
+                {/* Aspect Ratio Selector */}
+                <div className="space-y-1 text-left">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 block">
+                    Aspect Ratio / Size
+                  </label>
+                  <div className="flex bg-zinc-950 rounded-xl p-0.5 border border-zinc-855">
+                    {(["1:1", "9:16", "16:9"] as const).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setAiAspect(r)}
+                        className={`flex-1 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                          aiAspect === r
+                            ? "bg-zinc-805 text-white bg-zinc-800"
+                            : "text-zinc-550 hover:text-zinc-300 text-zinc-500"
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Seed Control */}
+                <div className="space-y-1 text-left">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 block">
+                      Seed Randomization
+                    </label>
+                    <span className="text-[7.5px] font-mono text-zinc-400">
+                      {aiSeed === "locked" ? `Seed: ${lockedSeedValue}` : "Random"}
+                    </span>
+                  </div>
+                  <div className="flex bg-zinc-950 rounded-xl p-0.5 border border-zinc-850">
+                    <button
+                      type="button"
+                      onClick={() => setAiSeed("random")}
+                      className={`flex-1 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1 ${
+                        aiSeed === "random"
+                          ? "bg-zinc-800 text-white"
+                          : "text-zinc-550 hover:text-zinc-300 text-zinc-500"
+                      }`}
+                    >
+                      <Shuffle className="w-2.5 h-2.5" /> Random
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAiSeed("locked");
+                        if (lockedSeedValue === 0) {
+                          setLockedSeedValue(Math.floor(Math.random() * 1000000));
+                        }
+                      }}
+                      className={`flex-1 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1 ${
+                        aiSeed === "locked"
+                          ? "bg-zinc-800 text-white"
+                          : "text-zinc-550 hover:text-zinc-300 text-zinc-500"
+                      }`}
+                    >
+                      <Lock className="w-2.5 h-2.5" /> Lock Seed
+                    </button>
+                  </div>
+                </div>
+
+                {/* Aesthetic presets */}
+                <div className="space-y-1 text-left">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 block">
+                    Aesthetic Profile Style
+                  </label>
+                  <select
+                    value={artStyle}
+                    onChange={(e) => setArtStyle(e.target.value as any)}
+                    className="w-full bg-zinc-950 border border-zinc-850 rounded-lg px-2 py-1.5 focus:border-orange-500 text-[9px] font-mono text-zinc-350 outline-none cursor-pointer"
+                  >
+                    <option value="none">No Preset Overrides</option>
+                    <option value="highfashion">🕶️ High-Fashion Editorial</option>
+                    <option value="cyberpunk">🔥 Cyberpunk Obsidian</option>
+                    <option value="vintage">📼 Vintage Vinyl (Nostalgia)</option>
+                    <option value="brutalist">💿 Brutalist Chrome Noise</option>
+                    <option value="lofi">☕ Mellow Lofi Watercolor</option>
+                  </select>
+                </div>
+
+                {/* Overlays */}
+                <div className="flex gap-2 pt-1">
+                  <label className="flex-1 select-none flex items-center gap-1.5 bg-zinc-950/40 p-2 border border-zinc-900 rounded-xl cursor-pointer hover:border-zinc-800 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={addParentalLabel}
+                      onChange={(e) => setAddParentalLabel(e.target.checked)}
+                      className="w-3 h-3 text-orange-500 rounded border-zinc-800 bg-transparent accent-orange-500 cursor-pointer"
+                    />
+                    <div className="text-left leading-none">
+                      <p className="text-[7.5px] font-bold text-zinc-300 uppercase">Parental</p>
+                      <p className="text-[6px] text-zinc-500 tracking-wider font-mono">Explicit</p>
+                    </div>
+                  </label>
+
+                  <label className="flex-1 select-none flex items-center gap-1.5 bg-zinc-950/40 p-2 border border-zinc-900 rounded-xl cursor-pointer hover:border-zinc-800 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={addTypographyOverlay}
+                      onChange={(e) => setAddTypographyOverlay(e.target.checked)}
+                      className="w-3 h-3 text-orange-500 rounded border-zinc-800 bg-transparent accent-orange-500 cursor-pointer"
+                    />
+                    <div className="text-left leading-none">
+                      <p className="text-[7.5px] font-bold text-zinc-300 uppercase">Text Burn</p>
+                      <p className="text-[6px] text-zinc-500 tracking-wider font-mono">Title Overlay</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               <textarea
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
@@ -249,7 +495,7 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
                 <button
                   type="button"
                   onClick={handleSuggestPrompt}
-                  className="flex-1 py-1 px-1 border border-zinc-850 hover:border-zinc-700 text-[8px] font-black uppercase tracking-wider text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer active:scale-95"
+                  className="flex-1 py-1.5 px-1 border border-zinc-850 hover:border-zinc-700 text-[8px] font-black uppercase tracking-wider text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer active:scale-95"
                 >
                   Suggest Vibe
                 </button>
@@ -257,7 +503,7 @@ export default function EditTrackModal({ track, onClose, onSave, onDelete }: {
                   type="button"
                   disabled={generatingArt || uploading}
                   onClick={handleGenerateAiArt}
-                  className="flex-1 py-1 px-1 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-900 text-black disabled:text-zinc-500 text-[8px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 disabled:scale-100"
+                  className="flex-1 py-1.5 px-1 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-900 text-black disabled:text-zinc-500 text-[8px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95 disabled:scale-100"
                 >
                   {generatingArt ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
                   {generatingArt ? "Designing..." : "Generate"}
